@@ -343,3 +343,11 @@ grant execute on function public.create_project_with_tasks(text, text, text, tex
 
 revoke execute on function public.owns_project(uuid) from public, anon;
 grant execute on function public.owns_project(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Defensa en profundidad: el rol anónimo no tiene ningún acceso a estas
+-- tablas (RLS ya lo impide al no existir políticas para anon).
+-- ---------------------------------------------------------------------
+revoke all on public.profiles, public.projects, public.project_tasks, public.metric_entries from anon;
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+grant execute on function public.handle_new_user() to supabase_auth_admin;

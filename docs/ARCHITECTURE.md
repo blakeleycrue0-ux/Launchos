@@ -150,7 +150,7 @@ supabase/migrations/ SQL versionado
 
 | Fase | Contenido | Estado |
 |---|---|---|
-| **1. Base** | Stack, auth real, onboarding, proyectos, roadmap, tareas, progreso, métricas, RLS, despliegue | Código completo; falta aplicar la migración y configurar las variables en Netlify |
+| **1. Base** | Stack, auth real, onboarding, proyectos, roadmap, tareas, progreso, métricas, RLS, despliegue | Migración aplicada en `plfnmdrrmwzrvthemraq` y verificada contra Supabase real; falta SMTP propio y el despliegue en Netlify |
 | 2. Producto | Perfil y ajustes de cuenta, regenerar el roadmap al cambiar las respuestas, tareas personalizadas, recordatorios por email, gráficos de métricas, modo oscuro | Pendiente |
 | 3. Contenido | Más caminos (uno por iteración), revisión editorial, recursos por tarea, versionado y migración de roadmaps | Pendiente |
 | 4. Inteligencia | Asistente con IA por tarea (Edge Function, sin exponer claves), recomendaciones basadas en métricas | Pendiente |
@@ -158,8 +158,11 @@ supabase/migrations/ SQL versionado
 
 ## 8. Riesgos y dependencias
 
-- **Proyecto de Supabase.** En la organización hay tres proyectos: `blakeleycrue0-ux's Project` (pausado), `invoicely` (pausado) y `Nuvora` (activo, de otro producto, que **ya tiene una tabla `profiles`**). Aplicar la migración en Nuvora fallaría o mezclaría datos de dos productos. **Recomendación: un proyecto dedicado a LaunchOS** (reactivar el primero o crear uno nuevo).
-- **Confirmación de email.** Si Supabase exige confirmar el email, el registro muestra "Revisa tu correo". Hay que configurar `Site URL` y `Redirect URLs` (dominio de Netlify + `/app` y `/reset-password`). El SMTP por defecto de Supabase tiene límites muy bajos: para producción hace falta un SMTP propio (Resend, Postmark…).
-- **Calidad del contenido.** Las tareas son orientativas. La tarea fiscal de Vinted advierte de que no es asesoramiento. Conviene una revisión editorial.
+- **Proyecto de Supabase:** `plfnmdrrmwzrvthemraq` (eu-central-1). Migraciones aplicadas: `initial_schema` y `profiles_active_project_index`. El análisis de seguridad de Supabase no da avisos.
+- **Verificación de RLS** (`2026-11-11`, contra la base real, con dos usuarios y el rol anónimo): 22 comprobaciones OK. Un usuario no puede leer, modificar, borrar ni colgar filas de proyectos ajenos; el rol anónimo no tiene acceso; no se puede cambiar el propietario de un proyecto.
+- **Email (bloqueante para producción):** la confirmación por email está activada y el SMTP integrado de Supabase solo permite unos pocos emails por hora (devolvió `429` en el segundo registro). Hay que configurar un SMTP propio (Resend, Postmark, SES…) en *Authentication → Emails → SMTP Settings*.
+- **URLs de autenticación:** configurar *Site URL* = `https://launchos-8hq2.netlify.app` y *Redirect URLs* = `https://launchos-8hq2.netlify.app/app`, `https://launchos-8hq2.netlify.app/reset-password` y `http://localhost:5173/**`. Si no, los enlaces de confirmación apuntan a la URL por defecto.
+- **Netlify:** el sitio `launchos-8hq2` pertenece a un equipo al que la cuenta conectada no tiene permiso de escritura (403), no tiene ningún despliegue y exige login SSO del equipo para verlo (*Visitor access*), lo que impediría el acceso a usuarios públicos.
+- **Calidad del contenido.** Las tareas son orientativas. La tarea fiscal de Vinted advierte de que no es asesoramiento.
 - **Renombrar `template_key`** rompe la relación con las tareas guardadas (está documentado y aparece aviso en la UI).
-- **Logo.** Hasta recibir el archivo oficial se muestra solo el nombre "LaunchOS". No se ha dibujado ninguna aproximación.
+- **Logo.** Hasta recibir el archivo oficial se muestra solo el nombre "LaunchOS".
