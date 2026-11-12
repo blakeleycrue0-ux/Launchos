@@ -4,6 +4,10 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  # Valores PÚBLICOS por diseño: acaban en el bundle del navegador y la seguridad
+  # de los datos depende de RLS. Aquí nunca va la clave service_role ni sb_secret_.
+  VITE_SUPABASE_URL = "https://plfnmdrrmwzrvthemraq.supabase.co"
+  VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_b_GwJDxsczn_FAJEoQ18rg_FrTbbSbn"
 
 # SPA: todas las rutas las resuelve React Router.
 [[redirects]]
