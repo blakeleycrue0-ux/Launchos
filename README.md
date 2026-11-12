@@ -2,11 +2,24 @@
 
 LaunchOS es un sistema operativo para emprendedores digitales: ayuda a elegir qué construir, evaluar tu punto de partida, seguir un roadmap personalizado con tareas reales y medir resultados.
 
-> Estado: **fase 1**. Autenticación, onboarding, proyectos, roadmap, tareas, progreso y métricas. Tres caminos disponibles: **Faceless content**, **Reventa en Vinted** y **Apps & SaaS**. El resto aparece como "En preparación".
+> Estado: **primera versión completa de la aplicación**, pendiente de publicar. Landing, autenticación, onboarding, resumen del proyecto, roadmap, tareas, métricas con gráficas, proyectos y cuenta. Tres caminos disponibles: **Faceless content**, **Reventa en Vinted** y **Apps & SaaS**. El resto aparece como "En preparación".
+
+## Pantallas
+
+| Ruta | Pantalla |
+|---|---|
+| `/` | Landing con demostración interactiva |
+| `/login`, `/signup`, `/forgot-password`, `/reset-password` | Autenticación |
+| `/app/new` | Onboarding (una pregunta por paso, vista previa en directo) |
+| `/app/projects/:id` | Resumen: progreso, próxima acción, resultados, fase actual y actividad |
+| `/app/projects/:id/roadmap` | Roadmap por fases con filtros |
+| `/app/projects/:id/tasks/:taskId` | Tarea: pasos, herramientas, prompts, notas y estado |
+| `/app/projects/:id/metrics` | Métricas: gráficas, registro e historial |
+| `/app/projects`, `/app/account` | Proyectos y cuenta |
 
 ## Stack
 
-React 19 · TypeScript · Vite · React Router · TanStack Query · Supabase (Auth, Postgres, RLS) · Netlify.
+React 19 · TypeScript · Vite · React Router · TanStack Query · Motion · Supabase (Auth, Postgres, RLS) · Netlify.
 Las decisiones y el modelo de datos están en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Puesta en marcha local
@@ -62,6 +75,13 @@ Ambas son públicas por diseño (acaban en el navegador). **Nunca** uses la clav
 
 Las `key` de las tareas son permanentes: la base de datos las referencia.
 
-## Logo
+## Identidad
 
-El logo oficial se configura en `src/config/brand.ts` (`logoSrc`) cuando el archivo original esté en `public/brand/`. Hasta entonces solo se muestra el nombre.
+- Tipografía: Geist y Geist Mono (autoalojadas).
+- Color: negro profundo, blanco, grises y azul índigo `#3A4CC0` como acento.
+- Logo: `public/brand/` (símbolo como máscara con transparencia e icono de app), configurado en `src/config/brand.ts`.
+- Movimiento: Motion, con `prefers-reduced-motion` respetado en toda la app.
+
+## Reseñas en la landing
+
+`REVIEWS` en `src/features/landing/LandingPage.tsx` debe contener solo opiniones reales. Mientras esté vacío, la sección lo indica de forma explícita.

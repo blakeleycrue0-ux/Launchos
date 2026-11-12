@@ -146,12 +146,21 @@ src/
 supabase/migrations/ SQL versionado
 ```
 
+## 6 bis. Interfaz
+
+- **Navegación:** barra lateral con selector de proyecto en escritorio; cabecera y pestañas inferiores en móvil (`AppShell`). El onboarding y la landing van a pantalla completa, fuera del shell, y se cargan aparte.
+- **Actividad:** no tiene tabla propia. `buildActivity` (`src/domain/activity.ts`) la deriva de las fechas de tareas y métricas ya guardadas; las tareas marcadas automáticamente al crear el proyecto no cuentan como actividad.
+- **Gráficas:** SVG propio (`src/components/charts`), una serie por gráfica, eje desde cero, tooltip con cursor, toque o flechas; la tabla de historial es la vista alternativa. `buildSeries` da un punto por día (último valor o acumulado según el tipo de métrica).
+- **Transición entre pantallas:** `FrozenOutlet` conserva la pantalla saliente durante su animación para que la entrante se monte una sola vez.
+- **Cortina (`Curtain`):** vive fuera del router para cubrir el paso del onboarding al resumen; solo se muestra tras la confirmación de Supabase.
+- **Landing:** la demostración usa `generateRoadmap`, el mismo cálculo que la app; las cifras de caminos y herramientas salen del contenido. Los únicos datos inventados son la serie de la gráfica, etiquetada como demostración.
+
 ## 7. Plan por fases
 
 | Fase | Contenido | Estado |
 |---|---|---|
 | **1. Base** | Stack, auth real, onboarding, proyectos, roadmap, tareas, progreso, métricas, RLS, despliegue | Migración aplicada en `plfnmdrrmwzrvthemraq` y verificada contra Supabase real; falta SMTP propio y el despliegue en Netlify |
-| 2. Producto | Perfil y ajustes de cuenta, regenerar el roadmap al cambiar las respuestas, tareas personalizadas, recordatorios por email, gráficos de métricas, modo oscuro | Pendiente |
+| 2. Producto | Hecho: cuenta, gráficas de métricas, landing, navegación móvil. Pendiente: regenerar el roadmap al cambiar las respuestas, tareas personalizadas, recordatorios por email, modo oscuro, borrado de cuenta | En curso |
 | 3. Contenido | Más caminos (uno por iteración), revisión editorial, recursos por tarea, versionado y migración de roadmaps | Pendiente |
 | 4. Inteligencia | Asistente con IA por tarea (Edge Function, sin exponer claves), recomendaciones basadas en métricas | Pendiente |
 | 5. Negocio | Planes de pago (Stripe), analítica de producto, panel interno | Pendiente |
