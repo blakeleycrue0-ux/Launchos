@@ -59,7 +59,8 @@ export interface PathScore {
   reasons: string[];
 }
 
-export function scorePaths(a: GuidanceAnswers): PathScore[] {
+/** Acepta respuestas parciales: las preguntas sin responder no puntúan. */
+export function scorePaths(a: Partial<GuidanceAnswers>): PathScore[] {
   const faceless: PathScore = { pathId: 'faceless', score: 0, reasons: [] };
   const vinted: PathScore = { pathId: 'vinted-reselling', score: 0, reasons: [] };
   const saas: PathScore = { pathId: 'apps-saas', score: 0, reasons: [] };
@@ -98,7 +99,7 @@ export function scorePaths(a: GuidanceAnswers): PathScore[] {
 
   if (a.exposure === 'private') {
     add(faceless, 2, 'No necesitas mostrarte ni tratar con clientes.');
-  } else {
+  } else if (a.exposure === 'ok_selling') {
     add(vinted, 1);
     add(saas, 1);
   }

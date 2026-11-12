@@ -1,30 +1,47 @@
 :root {
   /* Color — neutros con un único acento discreto */
-  --color-bg: #fafafa;
+  --color-bg: #f6f6f7;
   --color-surface: #ffffff;
-  --color-surface-muted: #f4f4f5;
-  --color-surface-hover: #f0f0f1;
-  --color-border: #e8e8ea;
-  --color-border-strong: #d6d6da;
-  --color-text: #0b0b0c;
+  --color-surface-muted: #f1f1f3;
+  --color-surface-hover: #eaeaed;
+  --color-border: #e6e6e9;
+  --color-border-strong: #d2d2d8;
+  --color-text: #0a0a0b;
   --color-text-secondary: #55555e;
   --color-text-tertiary: #8b8b94;
   --color-inverse: #ffffff;
-  --color-primary: #0b0b0c;
+  --color-primary: #0a0a0b;
   --color-primary-hover: #26262a;
-  --color-accent: #3d4fd6;
-  --color-accent-soft: #eef0fd;
+  --color-accent: #3a4cc0;
+  --color-accent-soft: #eceefa;
   --color-success: #17704a;
   --color-success-soft: #e9f5ef;
   --color-warning: #8a5a00;
   --color-warning-soft: #fdf5e3;
   --color-danger: #b42318;
   --color-danger-soft: #fdeceb;
-  --color-focus: rgb(61 79 214 / 0.35);
+  --color-focus: rgb(58 76 192 / 0.35);
+
+  /* Marca · negro profundo y azul índigo sobrio (acento de selección y progreso) */
+  --ink-950: #07080b;
+  --ink-900: #0d0e13;
+  --ink-800: #16181f;
+  --ink-700: #22252f;
+  --blue-700: #2f3ea3;
+  --blue-600: #3a4cc0;
+  --blue-500: #4c5fd3;
+  --blue-300: #a3adf0;
+  --blue-900: #161b45;
+  --on-dark: #ffffff;
+  --on-dark-2: rgb(255 255 255 / 0.64);
+  --on-dark-3: rgb(255 255 255 / 0.4);
+  --line-dark: rgb(255 255 255 / 0.1);
+  --radius-2xl: 28px;
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* Tipografía */
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --text-xs: 0.75rem;
   --text-sm: 0.8125rem;
   --text-base: 0.9375rem;

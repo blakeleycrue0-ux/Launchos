@@ -1,8 +1,11 @@
 export const BRAND = {
   name: 'LaunchOS',
   /**
-   * Ruta del logo oficial dentro de /public. Dejar en null hasta disponer del
-   * archivo original aprobado (p. ej. '/brand/launchos-logo.svg').
+   * Símbolo oficial (tres paneles inclinados), preparado a partir del archivo
+   * original como máscara con transparencia. La geometría no se ha modificado.
+   * Se pinta con el color del texto, así sirve sobre fondos claros y oscuros.
    */
-  logoSrc: null as string | null,
+  markSrc: '/brand/launchos-mark.png',
+  /** Proporción ancho/alto del símbolo. */
+  markRatio: 480 / 391,
 } as const;

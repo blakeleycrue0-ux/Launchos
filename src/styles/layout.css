@@ -66,10 +66,12 @@
   text-decoration: none;
   color: var(--color-text);
 }
-.logo img {
-  width: 26px;
-  height: 26px;
+.logo__mark {
   display: block;
+  flex-shrink: 0;
+  background: currentColor;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
 }
 .logo__wordmark {
   font-weight: 650;

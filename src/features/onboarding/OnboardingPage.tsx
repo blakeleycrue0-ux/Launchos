@@ -1,583 +1,647 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/Button';
-import { TextAreaField, TextField } from '@/components/ui/Field';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { Icon } from '@/components/ui/Icon';
-import { OptionGroup } from '@/components/ui/OptionGroup';
-import { Alert } from '@/components/ui/States';
-import { GUIDANCE_QUESTIONS, scorePaths, type GuidanceAnswers } from '@/content/guidance';
-import { BUDGET_OPTIONS, EXPERIENCE_OPTIONS, STAGE_OPTIONS, WEEKLY_HOURS_OPTIONS } from '@/content/options';
+import { Logo } from '@/components/ui/Logo';
+import { Spinner } from '@/components/ui/Spinner';
+import { GUIDANCE_QUESTIONS, scorePaths } from '@/content/guidance';
+import { BUDGET_OPTIONS, EXPERIENCE_OPTIONS, STAGE_OPTIONS, WEEKLY_HOURS_OPTIONS, labels } from '@/content/options';
 import { AVAILABLE_PATHS, PLANNED_PATHS, getAvailablePath } from '@/content/paths';
-import { estimateWeeks } from '@/domain/progress';
-import { generateRoadmap, indexTemplates } from '@/domain/roadmap';
-import type { AvailablePath, Budget, Experience, PathAnswers, Stage, WeeklyHours } from '@/domain/types';
-import { toUserMessage } from '@/lib/errors';
-import { formatMinutes } from '@/lib/format';
+import { useAuth } from '@/features/auth/AuthProvider';
 import { useCreateProject, useProjects } from '@/features/projects/api';
+import { toUserMessage } from '@/lib/errors';
+import { ProjectPreview, usePreviewModel } from './ProjectPreview';
+import { EMPTY_DRAFT, buildSteps, firstIncomplete, isStepComplete, type Draft, type StepId } from './steps';
+import './onboarding.css';
 
-type Step = 'path' | 'guidance' | 'situation' | 'path-questions' | 'details';
+const STORAGE_KEY = 'launchos:onboarding-v2';
+const EASE = [0.22, 1, 0.36, 1] as const;
+const GUIDE = '__guide';
 
-interface Draft {
-  pathId?: string;
-  experience?: Experience;
-  budget?: Budget;
-  weeklyHours?: WeeklyHours;
-  stage?: Stage;
-  pathAnswers: PathAnswers;
-  name: string;
-  goal: string;
-  guidance: Partial<GuidanceAnswers>;
+interface Stored {
+  draft: Draft;
+  step: StepId;
 }
 
-const DRAFT_KEY = 'launchos:onboarding-draft';
-const emptyDraft: Draft = { pathAnswers: {}, name: '', goal: '', guidance: {} };
-
-function loadDraft(): Draft {
+function load(): Stored {
   try {
-    const raw = sessionStorage.getItem(DRAFT_KEY);
-    return raw ? { ...emptyDraft, ...(JSON.parse(raw) as Partial<Draft>) } : emptyDraft;
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<Stored>;
+      if (parsed.draft) return { draft: { ...EMPTY_DRAFT, ...parsed.draft }, step: parsed.step ?? 'path' };
+    }
   } catch {
-    return emptyDraft;
+    /* almacenamiento no disponible */
   }
+  return { draft: EMPTY_DRAFT, step: 'path' };
 }
 
-const STEP_ORDER: Step[] = ['path', 'situation', 'path-questions', 'details'];
-const STEP_LABEL: Record<Step, string> = {
-  path: 'Camino',
-  guidance: 'Orientación',
-  situation: 'Tu situación',
-  'path-questions': 'Detalles del camino',
-  details: 'Tu proyecto',
-};
+interface ChoiceOption {
+  value: string;
+  label: string;
+  description?: string;
+  meta?: string;
+}
 
 export function OnboardingPage() {
   const navigate = useNavigate();
+  const { signOut } = useAuth();
   const projects = useProjects();
   const createProject = useCreateProject();
-  const [step, setStep] = useState<Step>('path');
-  const [draft, setDraft] = useState<Draft>(loadDraft);
-  const headingRef = useRef<HTMLHeadingElement>(null);
 
-  const isFirstProject = projects.data?.length === 0;
+  const initial = useMemo(load, []);
+  const [draft, setDraft] = useState<Draft>(initial.draft);
+  const [stepId, setStepId] = useState<StepId>(initial.step);
+  const [direction, setDirection] = useState(1);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
   const path = draft.pathId ? getAvailablePath(draft.pathId) : undefined;
+  const steps = useMemo(() => buildSteps(draft, path), [draft, path]);
+  const model = usePreviewModel(draft, path);
+
+  // Si el paso guardado ya no existe en el flujo actual, se vuelve al inicio.
+  const index = Math.max(0, steps.indexOf(stepId));
+  const current = steps[index] ?? 'path';
+
+  const stepsRef = useRef(steps);
+  const currentRef = useRef(current);
+  const draftRef = useRef(draft);
+  /** true cuando se llega a un paso desde «Cambiar» en la revisión: al responder se vuelve a ella. */
+  const returnToReview = useRef(false);
+  stepsRef.current = steps;
+  currentRef.current = current;
+  draftRef.current = draft;
+  const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ draft, step: current } satisfies Stored));
     } catch {
-      /* almacenamiento no disponible: el borrador simplemente no se conserva */
+      /* sin almacenamiento: el borrador no se conserva al recargar */
     }
-  }, [draft]);
+  }, [draft, current]);
 
-  useEffect(() => {
-    headingRef.current?.focus();
-  }, [step]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  const update = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
-
-  function go(next: Step) {
-    setStep(next);
+  const goTo = useCallback((target: StepId, dir?: number) => {
+    window.clearTimeout(timer.current);
+    const list = stepsRef.current;
+    setDirection(dir ?? (list.indexOf(target) >= list.indexOf(currentRef.current) ? 1 : -1));
+    setStepId(target);
     window.scrollTo({ top: 0 });
-  }
+  }, []);
 
-  const stepIndex = STEP_ORDER.indexOf(step === 'guidance' ? 'path' : step);
+  const goNext = useCallback(() => {
+    const list = stepsRef.current;
+    if (returnToReview.current && firstIncomplete(list, draftRef.current) === null) {
+      returnToReview.current = false;
+      return goTo('review', 1);
+    }
+    const next = list[list.indexOf(currentRef.current) + 1];
+    if (next) goTo(next, 1);
+  }, [goTo]);
 
-  return (
-    <div className="page page--narrow">
-      <div className="onboarding__progress" aria-hidden="true">
-        {STEP_ORDER.map((s, i) => (
-          <span key={s} className="onboarding__dot" data-active={i <= stepIndex} />
-        ))}
-      </div>
-      <p className="page-header__eyebrow">
-        Paso {stepIndex + 1} de {STEP_ORDER.length} · {STEP_LABEL[step]}
-      </p>
+  const goBack = useCallback(() => {
+    const list = stepsRef.current;
+    const prev = list[list.indexOf(currentRef.current) - 1];
+    if (prev) goTo(prev, -1);
+  }, [goTo]);
 
-      {step === 'path' && (
-        <PathStep
-          headingRef={headingRef}
-          welcome={isFirstProject}
-          selected={draft.pathId}
-          onSelect={(id) => {
-            update({ pathId: id, pathAnswers: id === draft.pathId ? draft.pathAnswers : {} });
-            go('situation');
-          }}
-          onGuidance={() => go('guidance')}
-        />
-      )}
-
-      {step === 'guidance' && (
-        <GuidanceStep
-          headingRef={headingRef}
-          answers={draft.guidance}
-          onChange={(guidance) => update({ guidance })}
-          onBack={() => go('path')}
-          onChoose={(pathId, g) => {
-            update({
-              pathId,
-              pathAnswers: pathId === draft.pathId ? draft.pathAnswers : {},
-              experience: g.experience,
-              budget: g.budget,
-              weeklyHours: g.weeklyHours,
-            });
-            go('situation');
-          }}
-        />
-      )}
-
-      {step === 'situation' && path && (
-        <SituationStep
-          headingRef={headingRef}
-          draft={draft}
-          onChange={update}
-          onBack={() => go('path')}
-          onNext={() => go(path.questions.length > 0 ? 'path-questions' : 'details')}
-        />
-      )}
-
-      {step === 'path-questions' && path && (
-        <PathQuestionsStep
-          headingRef={headingRef}
-          path={path}
-          answers={draft.pathAnswers}
-          onChange={(pathAnswers) => update({ pathAnswers })}
-          onBack={() => go('situation')}
-          onNext={() => go('details')}
-        />
-      )}
-
-      {step === 'details' && path && (
-        <DetailsStep
-          headingRef={headingRef}
-          path={path}
-          draft={draft}
-          onChange={update}
-          onBack={() => go(path.questions.length > 0 ? 'path-questions' : 'situation')}
-          submitting={createProject.isPending}
-          error={createProject.error ? toUserMessage(createProject.error) : null}
-          onSubmit={async () => {
-            const { experience, budget, weeklyHours, stage } = draft;
-            if (!experience || !budget || !weeklyHours || !stage) return;
-            const id = await createProject.mutateAsync({
-              path,
-              name: draft.name.trim(),
-              goal: draft.goal.trim(),
-              answers: { experience, budget, weeklyHours, stage },
-              pathAnswers: draft.pathAnswers,
-            });
-            try {
-              sessionStorage.removeItem(DRAFT_KEY);
-            } catch {
-              /* sin almacenamiento */
-            }
-            navigate(`/app/projects/${id}`, { replace: true });
-          }}
-        />
-      )}
-
-      {/* Si se recarga con un camino que ya no existe, volvemos al inicio. */}
-      {step !== 'path' && step !== 'guidance' && !path && (
-        <Alert tone="error">
-          El camino seleccionado no está disponible.{' '}
-          <button className="link" style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer' }} onClick={() => go('path')}>
-            Elegir otro
-          </button>
-        </Alert>
-      )}
-    </div>
+  /** Guarda una respuesta y, si viene de un clic, avanza tras una breve pausa. */
+  const pick = useCallback(
+    (patch: (d: Draft) => Draft, advance: boolean) => {
+      setDraft(patch);
+      if (advance) {
+        window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(goNext, 280);
+      }
+    },
+    [goNext],
   );
-}
 
-type HeadingRef = React.RefObject<HTMLHeadingElement | null>;
-
-function StepHeading({ headingRef, title, description }: { headingRef: HeadingRef; title: string; description?: string }) {
-  return (
-    <header style={{ marginBottom: 'var(--space-8)' }}>
-      <h1 ref={headingRef} tabIndex={-1} className="page-header__title" style={{ outline: 'none' }}>
-        {title}
-      </h1>
-      {description && <p className="page-header__desc">{description}</p>}
-    </header>
-  );
-}
-
-function StepActions({ onBack, children }: { onBack?: () => void; children: React.ReactNode }) {
-  return (
-    <div className="onboarding__actions">
-      {onBack ? (
-        <Button variant="ghost" onClick={onBack}>
-          <Icon name="arrowLeft" /> Atrás
-        </Button>
-      ) : (
-        <span />
-      )}
-      {children}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-function PathStep({
-  headingRef,
-  welcome,
-  selected,
-  onSelect,
-  onGuidance,
-}: {
-  headingRef: HeadingRef;
-  welcome: boolean;
-  selected?: string;
-  onSelect: (id: string) => void;
-  onGuidance: () => void;
-}) {
-  return (
-    <>
-      <StepHeading
-        headingRef={headingRef}
-        title={welcome ? '¿Qué quieres construir?' : 'Nuevo proyecto'}
-        description={
-          welcome
-            ? 'Elige un camino y LaunchOS creará un roadmap con tareas concretas adaptado a tu situación.'
-            : 'Elige el camino de tu nuevo proyecto.'
-        }
-      />
-      <div className="path-grid">
-        {AVAILABLE_PATHS.map((p) => (
-          <button key={p.id} type="button" className="path-card" data-selected={selected === p.id} onClick={() => onSelect(p.id)}>
-            <span className="path-card__name">{p.name}</span>
-            <span className="path-card__tagline">{p.tagline}</span>
-            <ul className="path-card__list">
-              {p.idealFor.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-            <span className="path-card__cta">
-              Elegir <Icon name="arrowRight" size={14} />
-            </span>
-          </button>
-        ))}
-        <button type="button" className="path-card path-card--outline" onClick={onGuidance}>
-          <span className="path-card__name">No lo tengo claro</span>
-          <span className="path-card__tagline">Responde 6 preguntas y te recomendaremos el camino que mejor encaja contigo.</span>
-          <span className="path-card__cta">
-            Ayúdame a elegir <Icon name="arrowRight" size={14} />
-          </span>
-        </button>
-      </div>
-
-      <section className="planned" aria-labelledby="planned-title">
-        <h2 id="planned-title" className="planned__title">
-          En preparación
-        </h2>
-        <p className="planned__desc">Estos caminos todavía no tienen roadmap. Los iremos activando por fases.</p>
-        <ul className="planned__list">
-          {PLANNED_PATHS.map((p) => (
-            <li key={p.id}>{p.name}</li>
-          ))}
-        </ul>
-      </section>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-const GUIDANCE_PROFILE_QUESTIONS = [
-  { key: 'experience', label: '¿Cuánta experiencia tienes?', options: EXPERIENCE_OPTIONS },
-  { key: 'budget', label: '¿Con qué presupuesto cuentas?', options: BUDGET_OPTIONS },
-  { key: 'weeklyHours', label: '¿Cuánto tiempo puedes dedicar a la semana?', options: WEEKLY_HOURS_OPTIONS },
-] as const;
-
-function GuidanceStep({
-  headingRef,
-  answers,
-  onChange,
-  onBack,
-  onChoose,
-}: {
-  headingRef: HeadingRef;
-  answers: Partial<GuidanceAnswers>;
-  onChange: (a: Partial<GuidanceAnswers>) => void;
-  onBack: () => void;
-  onChoose: (pathId: string, answers: GuidanceAnswers) => void;
-}) {
-  const allKeys = [...GUIDANCE_QUESTIONS.map((q) => q.key), ...GUIDANCE_PROFILE_QUESTIONS.map((q) => q.key)];
-  const complete = allKeys.every((k) => answers[k] !== undefined);
-  const scores = complete ? scorePaths(answers as GuidanceAnswers) : null;
-  const top = scores?.[0];
-  const topPath = top ? getAvailablePath(top.pathId) : undefined;
-
-  return (
-    <>
-      <StepHeading headingRef={headingRef} title="Encontremos tu camino" description="No hay respuestas correctas. Contesta pensando en tu situación actual." />
-      <div className="stack-lg">
-        {GUIDANCE_QUESTIONS.map((q) => (
-          <OptionGroup
-            key={q.key}
-            legend={q.label}
-            name={q.key}
-            options={q.options}
-            value={answers[q.key]}
-            onChange={(v) => onChange({ ...answers, [q.key]: v })}
-          />
-        ))}
-        {GUIDANCE_PROFILE_QUESTIONS.map((q) => (
-          <OptionGroup
-            key={q.key}
-            legend={q.label}
-            name={`g-${q.key}`}
-            options={q.options}
-            value={answers[q.key]}
-            onChange={(v) => onChange({ ...answers, [q.key]: v })}
-          />
-        ))}
-      </div>
-
-      {scores && topPath && top && (
-        <section className="card recommendation" aria-live="polite">
-          <div className="card__body">
-            <p className="page-header__eyebrow">Recomendación</p>
-            <h2 className="recommendation__title">{topPath.name}</h2>
-            <p className="page-header__desc">{topPath.description}</p>
-            {top.reasons.length > 0 && (
-              <ul className="recommendation__reasons">
-                {top.reasons.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            )}
-            <div className="recommendation__actions">
-              <Button variant="primary" onClick={() => onChoose(topPath.id, answers as GuidanceAnswers)}>
-                Empezar con {topPath.name}
-              </Button>
-              {scores.slice(1).map((s) => {
-                const alt = getAvailablePath(s.pathId);
-                return alt ? (
-                  <Button key={s.pathId} variant="secondary" onClick={() => onChoose(alt.id, answers as GuidanceAnswers)}>
-                    Prefiero {alt.name}
-                  </Button>
-                ) : null;
-              })}
-            </div>
-          </div>
-        </section>
-      )}
-
-      <StepActions onBack={onBack}>
-        {!complete && <span className="field__hint">Responde todas las preguntas para ver tu recomendación.</span>}
-      </StepActions>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-function SituationStep({
-  headingRef,
-  draft,
-  onChange,
-  onBack,
-  onNext,
-}: {
-  headingRef: HeadingRef;
-  draft: Draft;
-  onChange: (p: Partial<Draft>) => void;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  const complete = draft.experience && draft.budget && draft.weeklyHours && draft.stage;
-  return (
-    <>
-      <StepHeading headingRef={headingRef} title="Cuéntanos tu situación" description="Usaremos estas respuestas para adaptar las tareas, las herramientas y el ritmo del roadmap." />
-      <div className="stack-lg">
-        <OptionGroup legend="¿En qué punto estás?" name="stage" options={STAGE_OPTIONS} value={draft.stage} onChange={(stage) => onChange({ stage })} />
-        <OptionGroup legend="¿Cuánta experiencia tienes?" name="experience" options={EXPERIENCE_OPTIONS} value={draft.experience} onChange={(experience) => onChange({ experience })} />
-        <OptionGroup legend="¿Con qué presupuesto cuentas?" name="budget" options={BUDGET_OPTIONS} value={draft.budget} onChange={(budget) => onChange({ budget })} />
-        <OptionGroup
-          legend="¿Cuánto tiempo puedes dedicar a la semana?"
-          name="weeklyHours"
-          options={WEEKLY_HOURS_OPTIONS}
-          value={draft.weeklyHours}
-          onChange={(weeklyHours) => onChange({ weeklyHours })}
-        />
-      </div>
-      <StepActions onBack={onBack}>
-        <Button variant="primary" disabled={!complete} onClick={onNext}>
-          Continuar <Icon name="arrowRight" />
-        </Button>
-      </StepActions>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-function PathQuestionsStep({
-  headingRef,
-  path,
-  answers,
-  onChange,
-  onBack,
-  onNext,
-}: {
-  headingRef: HeadingRef;
-  path: AvailablePath;
-  answers: PathAnswers;
-  onChange: (a: PathAnswers) => void;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  const complete = path.questions.every((q) => answers[q.key]);
-  return (
-    <>
-      <StepHeading headingRef={headingRef} title={path.name} description="Unas preguntas específicas de este camino." />
-      <div className="stack-lg">
-        {path.questions.map((q) => (
-          <OptionGroup key={q.key} legend={q.label} name={q.key} options={q.options} value={answers[q.key]} onChange={(v) => onChange({ ...answers, [q.key]: v })} />
-        ))}
-      </div>
-      <StepActions onBack={onBack}>
-        <Button variant="primary" disabled={!complete} onClick={onNext}>
-          Continuar <Icon name="arrowRight" />
-        </Button>
-      </StepActions>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-function DetailsStep({
-  headingRef,
-  path,
-  draft,
-  onChange,
-  onBack,
-  onSubmit,
-  submitting,
-  error,
-}: {
-  headingRef: HeadingRef;
-  path: AvailablePath;
-  draft: Draft;
-  onChange: (p: Partial<Draft>) => void;
-  onBack: () => void;
-  onSubmit: () => Promise<void>;
-  submitting: boolean;
-  error: string | null;
-}) {
-  const [nameError, setNameError] = useState<string | null>(null);
-  const { experience, budget, weeklyHours, stage } = draft;
-  const ready = experience && budget && weeklyHours && stage;
-
-  const preview = useMemo(() => {
-    if (!ready) return null;
-    const tasks = generateRoadmap(path, { experience, budget, weeklyHours, stage, pathAnswers: draft.pathAnswers });
-    const index = indexTemplates(path);
-    const pending = tasks.filter((t) => t.status !== 'done');
-    const minutes = pending.reduce((acc, t) => acc + (index.get(t.templateKey)?.template.estimatedMinutes ?? 0), 0);
-    const phases = path.phases.filter((ph) => tasks.some((t) => t.phaseKey === ph.key));
-    return {
-      total: tasks.length,
-      autoDone: tasks.length - pending.length,
-      minutes,
-      weeks: estimateWeeks(minutes, weeklyHours),
-      phases,
-      first: pending[0] ? index.get(pending[0].templateKey)?.template : undefined,
-    };
-  }, [ready, path, experience, budget, weeklyHours, stage, draft.pathAnswers]);
-
-  async function handle(e: FormEvent) {
-    e.preventDefault();
-    const name = draft.name.trim();
-    if (!name) return setNameError('Ponle un nombre a tu proyecto');
-    if (name.length > 80) return setNameError('Máximo 80 caracteres');
-    setNameError(null);
+  async function submit() {
+    const missing = firstIncomplete(steps, draft);
+    if (missing) return goTo(missing);
+    const { experience, budget, weeklyHours, stage } = draft;
+    if (!path || !experience || !budget || !weeklyHours || !stage) return;
     try {
-      await onSubmit();
+      const id = await createProject.mutateAsync({
+        path,
+        name: draft.name.trim(),
+        goal: draft.goal.trim(),
+        answers: { experience, budget, weeklyHours, stage },
+        pathAnswers: draft.pathAnswers,
+      });
+      try {
+        sessionStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* sin almacenamiento */
+      }
+      navigate(`/app/projects/${id}`, { replace: true });
     } catch {
       /* el error se muestra desde el estado de la mutación */
     }
   }
 
-  return (
-    <form onSubmit={handle} noValidate>
-      <StepHeading headingRef={headingRef} title="Ponle nombre a tu proyecto" description="Podrás cambiarlo más adelante." />
-      <div className="stack-md">
-        <TextField
-          label="Nombre del proyecto"
-          placeholder={path.id === 'faceless' ? 'Ej.: Canal de historia en 10 minutos' : path.id === 'vinted-reselling' ? 'Ej.: Reventa de moda vintage' : 'Ej.: Gestor de reservas para fisioterapeutas'}
-          value={draft.name}
-          maxLength={80}
-          error={nameError}
-          onChange={(e) => onChange({ name: e.target.value })}
-        />
-        <TextAreaField
-          label="Objetivo (opcional)"
-          placeholder="¿Qué quieres conseguir en los próximos 3 meses?"
-          value={draft.goal}
-          maxLength={500}
-          rows={3}
-          onChange={(e) => onChange({ goal: e.target.value })}
-          hint="Lo usaremos para personalizar los prompts de las tareas."
-        />
-      </div>
+  const complete = isStepComplete(current, draft);
+  const isReview = current === 'review';
 
-      {preview && (
-        <section className="card" style={{ marginTop: 'var(--space-8)' }} aria-label="Resumen del roadmap">
-          <div className="card__header">
-            <h2 className="card__title">Tu roadmap</h2>
-            <span className="badge">{path.name}</span>
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (isReview) void submit();
+    else if (complete) goNext();
+  }
+
+  // ---------------------------------------------------------------- pasos
+  const pathChange = (id: string) => (d: Draft): Draft => ({ ...d, pathId: id, pathAnswers: id === d.pathId ? d.pathAnswers : {} });
+
+  let view: { eyebrow: string; question: string; help?: string; body: ReactNode };
+
+  switch (current) {
+    case 'path': {
+      const options: ChoiceOption[] = [
+        ...AVAILABLE_PATHS.map((p) => ({
+          value: p.id,
+          label: p.name,
+          description: p.tagline,
+          meta: `${p.phases.length} fases · hasta ${p.phases.reduce((n, ph) => n + ph.tasks.length, 0)} tareas`,
+        })),
+        { value: GUIDE, label: 'No lo tengo claro', description: 'Responde tres preguntas más y te recomendamos uno.' },
+      ];
+      view = {
+        eyebrow: projects.data?.length === 0 ? 'Bienvenido a LaunchOS' : 'Nuevo proyecto',
+        question: '¿Qué quieres construir?',
+        help: 'Elige un camino. Tu plan se va montando mientras respondes.',
+        body: (
+          <>
+            <ChoiceList
+              labelledBy="onb-question"
+              name="path"
+              options={options}
+              value={draft.mode === 'guided' ? GUIDE : draft.pathId}
+              onSelect={(v, adv) =>
+                pick(
+                  (d) =>
+                    v === GUIDE
+                      ? d.mode === 'guided'
+                        ? d
+                        : { ...d, mode: 'guided', pathId: undefined, pathAnswers: {} }
+                      : { ...pathChange(v)(d), mode: 'direct' },
+                  adv,
+                )
+              }
+            />
+            <details className="onb-planned">
+              <summary>{PLANNED_PATHS.length} caminos más en preparación</summary>
+              <p>{PLANNED_PATHS.map((p) => p.name).join(' · ')}</p>
+            </details>
+          </>
+        ),
+      };
+      break;
+    }
+    case 'g-motivation':
+    case 'g-strength':
+    case 'g-exposure': {
+      const key = current.slice(2) as 'motivation' | 'strength' | 'exposure';
+      const q = GUIDANCE_QUESTIONS.find((g) => g.key === key)!;
+      view = {
+        eyebrow: 'Orientación',
+        question: q.label,
+        help: 'No hay respuestas correctas. Piensa en tu situación de hoy.',
+        body: (
+          <ChoiceList
+            labelledBy="onb-question"
+            name={key}
+            options={q.options}
+            value={draft.guidance[key]}
+            onSelect={(v, adv) => pick((d) => ({ ...d, guidance: { ...d.guidance, [key]: v } }), adv)}
+          />
+        ),
+      };
+      break;
+    }
+    case 'g-result': {
+      const scores = scorePaths({ ...draft.guidance, experience: draft.experience, budget: draft.budget, weeklyHours: draft.weeklyHours });
+      const top = scores[0]!;
+      const topPath = getAvailablePath(top.pathId)!;
+      view = {
+        eyebrow: 'Nuestra recomendación',
+        question: `Te encaja ${topPath.name}.`,
+        help: topPath.description,
+        body: (
+          <>
+            {top.reasons.length > 0 && (
+              <ul className="onb-reasons">
+                {top.reasons.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            )}
+            <ChoiceList
+              labelledBy="onb-question"
+              name="recommended"
+              options={scores.map((s, i) => {
+                const p = getAvailablePath(s.pathId)!;
+                return { value: p.id, label: p.name, description: p.tagline, meta: i === 0 ? 'Recomendado' : undefined };
+              })}
+              value={draft.pathId}
+              onSelect={(v, adv) => pick(pathChange(v), adv)}
+            />
+          </>
+        ),
+      };
+      break;
+    }
+    case 'stage':
+      view = {
+        eyebrow: 'Tu situación',
+        question: '¿En qué punto estás?',
+        help: 'Así sabremos qué tareas puedes saltarte.',
+        body: <ChoiceList labelledBy="onb-question" name="stage" options={STAGE_OPTIONS} value={draft.stage} onSelect={(v, adv) => pick((d) => ({ ...d, stage: v as Draft['stage'] }), adv)} />,
+      };
+      break;
+    case 'experience':
+      view = {
+        eyebrow: 'Tu situación',
+        question: '¿Cuánta experiencia tienes?',
+        help: 'Si empiezas de cero, añadimos las bases.',
+        body: (
+          <ChoiceList labelledBy="onb-question" name="experience" options={EXPERIENCE_OPTIONS} value={draft.experience} onSelect={(v, adv) => pick((d) => ({ ...d, experience: v as Draft['experience'] }), adv)} />
+        ),
+      };
+      break;
+    case 'budget':
+      view = {
+        eyebrow: 'Tu situación',
+        question: '¿Con qué presupuesto cuentas?',
+        help: 'Te recomendaremos herramientas que encajen.',
+        body: <ChoiceList labelledBy="onb-question" name="budget" options={BUDGET_OPTIONS} value={draft.budget} onSelect={(v, adv) => pick((d) => ({ ...d, budget: v as Draft['budget'] }), adv)} />,
+      };
+      break;
+    case 'weeklyHours':
+      view = {
+        eyebrow: 'Tu situación',
+        question: '¿Cuántas horas a la semana?',
+        help: 'Con esto calculamos cuánto durará tu plan.',
+        body: (
+          <ChoiceList
+            labelledBy="onb-question"
+            name="weeklyHours"
+            options={WEEKLY_HOURS_OPTIONS}
+            value={draft.weeklyHours}
+            onSelect={(v, adv) => pick((d) => ({ ...d, weeklyHours: v as Draft['weeklyHours'] }), adv)}
+          />
+        ),
+      };
+      break;
+    case 'name':
+      view = {
+        eyebrow: 'Tu proyecto',
+        question: '¿Cómo se llama tu proyecto?',
+        help: 'Podrás cambiarlo cuando quieras.',
+        body: (
+          <div className="onb-field">
+            <input
+              className="onb-input"
+              aria-labelledby="onb-question"
+              autoFocus
+              autoComplete="off"
+              maxLength={80}
+              placeholder={path?.id === 'faceless' ? 'Historia en 10 minutos' : path?.id === 'vinted-reselling' ? 'Moda vintage' : 'Reservas para fisios'}
+              value={draft.name}
+              onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+            />
+            <span className="onb-field__count">{draft.name.length}/80</span>
           </div>
-          <div className="card__body stack-md">
-            <dl className="stats">
-              <div>
-                <dt>Tareas</dt>
-                <dd>{preview.total}</dd>
-              </div>
-              <div>
-                <dt>Trabajo estimado</dt>
-                <dd>{formatMinutes(preview.minutes)}</dd>
-              </div>
-              <div>
-                <dt>A tu ritmo</dt>
-                <dd>≈ {preview.weeks} {preview.weeks === 1 ? 'semana' : 'semanas'}</dd>
-              </div>
-            </dl>
-            <ol className="phase-preview">
-              {preview.phases.map((ph) => (
-                <li key={ph.key}>
-                  <strong>{ph.title}</strong>
-                  <span>{ph.description}</span>
-                </li>
+        ),
+      };
+      break;
+    case 'goal':
+      view = {
+        eyebrow: 'Tu proyecto',
+        question: '¿Qué quieres conseguir en tres meses?',
+        help: 'Opcional. Lo usamos para personalizar los prompts de tus tareas.',
+        body: (
+          <div className="onb-field">
+            <textarea
+              className="onb-input onb-input--area"
+              aria-labelledby="onb-question"
+              autoFocus
+              rows={3}
+              maxLength={500}
+              placeholder="Publicar doce vídeos y llegar a mil seguidores"
+              value={draft.goal}
+              onChange={(e) => setDraft((d) => ({ ...d, goal: e.target.value }))}
+            />
+            <span className="onb-field__count">{draft.goal.length}/500</span>
+          </div>
+        ),
+      };
+      break;
+    case 'review': {
+      const rows: { label: string; value: string | undefined; step: StepId }[] = [
+        { label: 'Camino', value: path?.name, step: draft.mode === 'guided' ? 'g-result' : 'path' },
+        { label: 'Nombre', value: draft.name.trim() || undefined, step: 'name' },
+        { label: 'Objetivo', value: draft.goal.trim() || 'Sin objetivo', step: 'goal' },
+        { label: 'Etapa', value: draft.stage && labels.stage(draft.stage), step: 'stage' },
+        { label: 'Experiencia', value: draft.experience && labels.experience(draft.experience), step: 'experience' },
+        { label: 'Presupuesto', value: draft.budget && labels.budget(draft.budget), step: 'budget' },
+        { label: 'Tiempo semanal', value: draft.weeklyHours && labels.weeklyHours(draft.weeklyHours), step: 'weeklyHours' },
+        ...(path?.questions ?? []).map((q) => ({
+          label: q.label.replace(/^¿|\?$/g, ''),
+          value: q.options.find((o) => o.value === draft.pathAnswers[q.key])?.label,
+          step: `q:${q.key}` as StepId,
+        })),
+      ];
+      view = {
+        eyebrow: 'Último paso',
+        question: 'Tu plan está listo.',
+        help: model
+          ? `${model.total} tareas en ${model.phases.length} fases${model.done > 0 ? `, ${model.done} ya marcadas como hechas por tu etapa` : ''}. Revisa tus respuestas y crea el proyecto.`
+          : undefined,
+        body: (
+          <>
+            <dl className="onb-review">
+              {rows.map((r, i) => (
+                <motion.div key={r.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE, delay: 0.06 + i * 0.035 }}>
+                  <dt>{r.label}</dt>
+                  <dd data-missing={!r.value}>{r.value ?? 'Pendiente'}</dd>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      returnToReview.current = true;
+                      goTo(r.step);
+                    }}
+                    aria-label={`Cambiar ${r.label.toLowerCase()}`}
+                  >
+                    Cambiar
+                  </button>
+                </motion.div>
               ))}
-            </ol>
-            {preview.autoDone > 0 && (
-              <p className="field__hint">
-                Hemos marcado {preview.autoDone} {preview.autoDone === 1 ? 'tarea' : 'tareas'} como completadas porque ya has superado esa etapa. Podrás reabrirlas.
+            </dl>
+            {createProject.error && (
+              <p className="onb-error" role="alert">
+                {toUserMessage(createProject.error)}
               </p>
             )}
-            {preview.first && (
-              <p className="field__hint">
-                Primera tarea: <strong style={{ color: 'var(--color-text)' }}>{preview.first.title}</strong>
-              </p>
-            )}
+          </>
+        ),
+      };
+      break;
+    }
+    default: {
+      const q = path?.questions.find((x) => `q:${x.key}` === current);
+      view = q
+        ? {
+            eyebrow: path!.name,
+            question: q.label,
+            help: q.help,
+            body: (
+              <ChoiceList
+                labelledBy="onb-question"
+                name={q.key}
+                options={q.options}
+                value={draft.pathAnswers[q.key]}
+                onSelect={(v, adv) => pick((d) => ({ ...d, pathAnswers: { ...d.pathAnswers, [q.key]: v } }), adv)}
+              />
+            ),
+          }
+        : { eyebrow: '', question: 'Elige primero un camino.', body: null };
+    }
+  }
+
+  const hasProjects = (projects.data?.length ?? 0) > 0;
+  const continueLabel = isReview ? 'Crear proyecto' : current === 'goal' && !draft.goal.trim() ? 'Saltar' : 'Continuar';
+  const peek = path && model ? `${model.phases.length} fases · ${model.total} tareas` : draft.mode === 'guided' ? 'Buscando tu camino' : 'Elige un camino';
+
+  return (
+    <MotionConfig reducedMotion="user">
+      <div className="onb">
+        <form className="onb__left" onSubmit={onSubmit} noValidate>
+          <header className="onb__bar">
+            <Logo to={hasProjects ? '/app' : '/app/new'} size={22} />
+            <div className="onb__bar-right">
+              <span className="onb__count" aria-label={`Paso ${index + 1} de ${steps.length}`}>
+                <b>{String(index + 1).padStart(2, '0')}</b> / {String(steps.length).padStart(2, '0')}
+              </span>
+              {hasProjects ? (
+                <Link to="/app" className="onb__exit">
+                  Salir
+                </Link>
+              ) : (
+                <button type="button" className="onb__exit" onClick={() => void signOut()}>
+                  Cerrar sesión
+                </button>
+              )}
+            </div>
+          </header>
+          <div className="onb__progress" role="progressbar" aria-label="Progreso del cuestionario" aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={index + 1}>
+            <motion.div className="onb__progress-bar" animate={{ width: `${((index + 1) / steps.length) * 100}%` }} transition={{ duration: 0.6, ease: EASE }} />
           </div>
-        </section>
-      )}
 
-      {error && (
-        <div style={{ marginTop: 'var(--space-4)' }}>
-          <Alert tone="error">{error}</Alert>
+          <main className="onb__main" id="main">
+            <AnimatePresence mode="wait" custom={direction} initial={false}>
+              <motion.div
+                key={current}
+                className="onb__step"
+                custom={direction}
+                variants={{
+                  enter: (dir: number) => ({ opacity: 0, x: dir * 28 }),
+                  center: { opacity: 1, x: 0 },
+                  exit: (dir: number) => ({ opacity: 0, x: dir * -28 }),
+                }}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.32, ease: EASE }}
+              >
+                <StepHeading eyebrow={view.eyebrow} question={view.question} help={view.help} focus={current !== 'name' && current !== 'goal'} />
+                {view.body}
+              </motion.div>
+            </AnimatePresence>
+          </main>
+
+          <footer className="onb__foot">
+            <button type="button" className="onb-peek" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
+              <span className="onb-peek__dot" aria-hidden="true" />
+              <span className="onb-peek__label">Vista previa</span>
+              <span className="onb-peek__meta">{peek}</span>
+              <Icon name="arrowRight" size={14} />
+            </button>
+            <div className="onb__actions">
+              {index > 0 ? (
+                <button type="button" className="onb-back" onClick={goBack}>
+                  <Icon name="arrowLeft" /> Atrás
+                </button>
+              ) : (
+                <span />
+              )}
+              <button type="submit" className="onb-next" disabled={(!isReview && !complete) || createProject.isPending} aria-busy={createProject.isPending || undefined}>
+                {createProject.isPending && <Spinner />}
+                {continueLabel}
+                {!createProject.isPending && <Icon name="arrowRight" />}
+              </button>
+            </div>
+          </footer>
+        </form>
+
+        <aside className="onb__right" aria-label="Vista previa en directo">
+          <div className="onb-stage" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </div>
+          <div className="onb__right-scroll">
+            <p className="onb__right-label">Vista previa en directo</p>
+            <ProjectPreview draft={draft} path={path} model={model} />
+          </div>
+        </aside>
+
+        <AnimatePresence>
+          {sheetOpen && (
+            <PreviewSheet onClose={() => setSheetOpen(false)}>
+              <ProjectPreview draft={draft} path={path} model={model} />
+            </PreviewSheet>
+          )}
+        </AnimatePresence>
+      </div>
+    </MotionConfig>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function StepHeading({ eyebrow, question, help, focus }: { eyebrow: string; question: string; help?: string; focus: boolean }) {
+  const ref = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (focus) ref.current?.focus({ preventScroll: true });
+  }, [focus]);
+  return (
+    <header className="onb__heading">
+      {eyebrow && <p className="onb__eyebrow">{eyebrow}</p>}
+      <h1 id="onb-question" ref={ref} tabIndex={-1} className="onb__question">
+        {question}
+      </h1>
+      {help && <p className="onb__help">{help}</p>}
+    </header>
+  );
+}
+
+/**
+ * Lista de opciones como grupo de radio nativo.
+ * - Clic o tecla numérica: selecciona y avanza.
+ * - Flechas o espacio: solo selecciona (Enter continúa).
+ */
+function ChoiceList<T extends string>({
+  labelledBy,
+  name,
+  options,
+  value,
+  onSelect,
+}: {
+  labelledBy: string;
+  name: string;
+  options: readonly (ChoiceOption & { value: T })[];
+  value: T | undefined;
+  onSelect: (value: T, advance: boolean) => void;
+}) {
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'TEXTAREA' || tag === 'SELECT') return;
+      const n = Number(e.key);
+      const opt = Number.isInteger(n) && n >= 1 ? options[n - 1] : undefined;
+      if (opt) {
+        e.preventDefault();
+        onSelectRef.current(opt.value, true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [options]);
+
+  return (
+    <div className="onb-choices" role="radiogroup" aria-labelledby={labelledBy}>
+      {options.map((opt, i) => {
+        const selected = value === opt.value;
+        return (
+          <motion.label
+            key={opt.value}
+            className="onb-choice"
+            data-selected={selected}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.42, ease: EASE, delay: 0.06 + i * 0.05 }}
+            whileTap={{ scale: 0.99 }}
+            onClick={(e) => {
+              // El clic real llega sobre la etiqueta; el del teclado, sobre el input.
+              if ((e.target as HTMLElement).tagName !== 'INPUT') onSelect(opt.value, true);
+            }}
+          >
+            <input type="radio" name={`onb-${name}`} value={opt.value} checked={selected} onChange={() => onSelect(opt.value, false)} />
+            <span className="onb-choice__key" aria-hidden="true">
+              {i + 1}
+            </span>
+            <span className="onb-choice__text">
+              <span className="onb-choice__label">{opt.label}</span>
+              {opt.description && <span className="onb-choice__desc">{opt.description}</span>}
+            </span>
+            {opt.meta && <span className="onb-choice__meta">{opt.meta}</span>}
+            <span className="onb-choice__check" aria-hidden="true">
+              <Icon name="check" size={13} />
+            </span>
+          </motion.label>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Hoja inferior (móvil) con la vista previa. No altera el progreso. */
+function PreviewSheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div className="onb-sheet" role="dialog" aria-modal="true" aria-label="Vista previa de tu proyecto">
+      <motion.div className="onb-sheet__backdrop" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} />
+      <motion.div
+        className="onb-sheet__panel"
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ duration: 0.45, ease: EASE }}
+        drag="y"
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.6 }}
+        onDragEnd={(_e, info) => {
+          if (info.offset.y > 110 || info.velocity.y > 600) onClose();
+        }}
+      >
+        <div className="onb-sheet__grip" aria-hidden="true" />
+        <div className="onb-sheet__head">
+          <span>Vista previa en directo</span>
+          <button ref={closeRef} type="button" onClick={onClose}>
+            Cerrar
+          </button>
         </div>
-      )}
-
-      <StepActions onBack={onBack}>
-        <Button type="submit" variant="primary" size="lg" loading={submitting}>
-          Crear proyecto
-        </Button>
-      </StepActions>
-    </form>
+        <div className="onb-sheet__body">{children}</div>
+      </motion.div>
+    </div>
   );
 }
