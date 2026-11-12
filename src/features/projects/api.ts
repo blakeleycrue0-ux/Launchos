@@ -126,6 +126,19 @@ export function useSetActiveProject() {
   });
 }
 
+export function useUpdateProfile() {
+  const user = useUser();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (displayName: string) => {
+      const { data, error } = await getSupabase().from('profiles').update({ display_name: displayName.trim() || null }).eq('id', user.id).select('*').single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => qc.setQueryData(queryKeys.profile(user.id), data),
+  });
+}
+
 export function useUpdateProject(projectId: string) {
   const user = useUser();
   const qc = useQueryClient();

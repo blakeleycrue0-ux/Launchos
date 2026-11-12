@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeMetric } from './summary';
+import { buildSeries, summarizeMetric } from './summary';
 import type { MetricDefinition } from '@/domain/types';
 
 const snapshot: MetricDefinition = { key: 'followers', label: 'Seguidores', unit: 'count', kind: 'snapshot', help: '' };
@@ -26,5 +26,24 @@ describe('summarizeMetric', () => {
     ], today);
     expect(s.value).toBe(80);
     expect(s.secondary).toBe(30);
+  });
+});
+
+describe('buildSeries', () => {
+  it('snapshot: un punto por día en orden cronológico, con el último valor del día', () => {
+    const series = buildSeries(snapshot, [
+      { metricKey: 'followers', value: 130, recordedOn: '2026-11-10' },
+      { metricKey: 'followers', value: 125, recordedOn: '2026-11-10' },
+      { metricKey: 'followers', value: 100, recordedOn: '2026-11-01' },
+    ]);
+    expect(series).toEqual([{ date: '2026-11-01', value: 100 }, { date: '2026-11-10', value: 130 }]);
+  });
+  it('flow: acumulado', () => {
+    const series = buildSeries(flow, [
+      { metricKey: 'revenue', value: 30, recordedOn: '2026-11-05' },
+      { metricKey: 'revenue', value: 50, recordedOn: '2026-08-01' },
+      { metricKey: 'revenue', value: 20, recordedOn: '2026-11-05' },
+    ]);
+    expect(series).toEqual([{ date: '2026-08-01', value: 50 }, { date: '2026-11-05', value: 100 }]);
   });
 });

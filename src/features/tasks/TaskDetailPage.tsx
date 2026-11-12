@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { LayoutGroup, motion } from 'motion/react';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { TextAreaField } from '@/components/ui/Field';
 import { Icon } from '@/components/ui/Icon';
@@ -57,48 +58,53 @@ export function TaskDetailPage() {
 
   return (
     <div className="page page--narrow">
-      <ButtonLink to={base} variant="ghost" size="sm" className="breadcrumb-btn">
-        <Icon name="arrowLeft" size={14} /> {project.name}
+      <ButtonLink to={`${base}/roadmap`} variant="ghost" size="sm" className="backlink">
+        <Icon name="arrowLeft" size={14} /> Roadmap
       </ButtonLink>
 
-      <header className="task-header">
-        <p className="page-header__eyebrow">
+      <header className="thead">
+        <p className="phead__eyebrow">
           {phase.title} · Tarea {index + 1} de {items.length}
         </p>
-        <h1 className="page-header__title">{template.title}</h1>
-        <p className="page-header__desc">{template.summary}</p>
-        <div className="task-header__meta">
-          <span className="badge">{formatMinutes(template.estimatedMinutes)}</span>
-          {row.completed_at && row.status === 'done' && <span className="badge badge--success">Completada el {formatDate(row.completed_at)}</span>}
-          {row.started_at && row.status === 'in_progress' && <span className="badge badge--accent">Empezada el {formatDate(row.started_at)}</span>}
+        <h1 className="thead__title">{template.title}</h1>
+        <p className="thead__desc">{template.summary}</p>
+        <div className="thead__meta">
+          <span className="tag">{formatMinutes(template.estimatedMinutes)}</span>
+          {row.completed_at && row.status === 'done' && <span className="tag tag--success">Completada el {formatDate(row.completed_at)}</span>}
+          {row.started_at && row.status === 'in_progress' && <span className="tag tag--accent">Empezada el {formatDate(row.started_at)}</span>}
         </div>
       </header>
 
       <div className="task-status-bar">
-        <div className="segmented" role="group" aria-label="Estado de la tarea">
-          {STATUS_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              aria-pressed={row.status === opt.value}
-              disabled={update.isPending}
-              onClick={() => row.status !== opt.value && update.mutate({ taskId: row.id, patch: { status: opt.value } })}
-            >
-              {opt.label}
-            </button>
-          ))}
+        <div className="seg" role="group" aria-label="Estado de la tarea">
+          <LayoutGroup id="task-status">
+            {STATUS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                aria-pressed={row.status === opt.value}
+                disabled={update.isPending}
+                onClick={() => row.status !== opt.value && update.mutate({ taskId: row.id, patch: { status: opt.value } })}
+              >
+                {row.status === opt.value && <motion.span layoutId="pill" className="seg__pill" transition={{ type: 'spring', stiffness: 460, damping: 36 }} />}
+                <span>{opt.label}</span>
+              </button>
+            ))}
+          </LayoutGroup>
         </div>
         {update.isPending && <span className="field__hint">Guardando…</span>}
       </div>
       {update.error && <Alert tone="error">No se ha podido guardar: {toUserMessage(update.error)}</Alert>}
 
       <section className="task-section" aria-labelledby="steps-title">
-        <h2 id="steps-title" className="section-title">
+        <h2 id="steps-title" className="block__title">
           Pasos
         </h2>
         <ol className="steps">
-          {template.steps.map((s) => (
-            <li key={s}>{s}</li>
+          {template.steps.map((s, i) => (
+            <motion.li key={s} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: 0.08 + i * 0.05 }}>
+              {s}
+            </motion.li>
           ))}
         </ol>
       </section>
@@ -112,7 +118,7 @@ export function TaskDetailPage() {
 
       {template.tools && template.tools.length > 0 && (
         <section className="task-section" aria-labelledby="tools-title">
-          <h2 id="tools-title" className="section-title">
+          <h2 id="tools-title" className="block__title">
             Herramientas
           </h2>
           <ul className="tool-list">
@@ -126,7 +132,7 @@ export function TaskDetailPage() {
                     </span>
                     <span className="tool__purpose">{tool.purpose}</span>
                   </span>
-                  <span className="badge">{PRICING_LABEL[tool.pricing]}</span>
+                  <span className="tag">{PRICING_LABEL[tool.pricing]}</span>
                   <Icon name="external" size={14} />
                 </a>
               </li>
@@ -137,7 +143,7 @@ export function TaskDetailPage() {
 
       {template.prompts && template.prompts.length > 0 && (
         <section className="task-section" aria-labelledby="prompts-title">
-          <h2 id="prompts-title" className="section-title">
+          <h2 id="prompts-title" className="block__title">
             Prompts
           </h2>
           <p className="field__hint" style={{ marginBottom: 'var(--space-3)' }}>
@@ -153,7 +159,7 @@ export function TaskDetailPage() {
 
       {template.tips && template.tips.length > 0 && (
         <section className="task-section" aria-labelledby="tips-title">
-          <h2 id="tips-title" className="section-title">
+          <h2 id="tips-title" className="block__title">
             Consejos
           </h2>
           <ul className="tips">

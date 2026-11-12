@@ -1,6 +1,6 @@
 import type { MetricUnit } from '@/domain/types';
 
-const numberFmt = new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2 });
+const numberFmt = new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2, useGrouping: 'always' as unknown as boolean });
 const currencyFmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
 const dateFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
 const shortDateFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
@@ -28,4 +28,17 @@ export function formatMinutes(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
+
+const rtf = new Intl.RelativeTimeFormat('es-ES', { numeric: 'auto' });
+
+/** «hace 5 minutos», «ayer», «hace 3 días»… y fecha corta a partir de una semana. */
+export function formatRelative(iso: string, now = new Date()): string {
+  const diff = (new Date(iso).getTime() - now.getTime()) / 1000;
+  const abs = Math.abs(diff);
+  if (abs < 60) return 'ahora mismo';
+  if (abs < 3600) return rtf.format(Math.round(diff / 60), 'minute');
+  if (abs < 86400) return rtf.format(Math.round(diff / 3600), 'hour');
+  if (abs < 86400 * 7) return rtf.format(Math.round(diff / 86400), 'day');
+  return formatDate(iso, true);
 }

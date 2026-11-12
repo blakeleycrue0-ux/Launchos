@@ -26,13 +26,13 @@ export function ProjectSettings({ project }: { project: ProjectRow }) {
   }
 
   return (
-    <section className="card" aria-labelledby="settings-title">
-      <div className="card__header">
-        <h2 id="settings-title" className="card__title">
+    <section className="block" aria-labelledby="settings-title">
+      <header className="block__head">
+        <h2 id="settings-title" className="block__title">
           Ajustes del proyecto
         </h2>
-      </div>
-      <div className="card__body stack-md">
+      </header>
+      <div className="stack-md">
         {update.error && <Alert tone="error">{toUserMessage(update.error)}</Alert>}
         {remove.error && <Alert tone="error">{toUserMessage(remove.error)}</Alert>}
         {saved && !editing && <Alert tone="success">Cambios guardados.</Alert>}

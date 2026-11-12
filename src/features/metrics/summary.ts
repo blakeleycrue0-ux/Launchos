@@ -45,3 +45,28 @@ export function summarizeMetric(def: MetricDefinition, points: readonly MetricPo
   const recent = own.filter((p) => p.recordedOn >= since).reduce((acc, p) => acc + p.value, 0);
   return { definition: def, value: total, secondary: recent, lastRecordedOn: last.recordedOn, entries: own.length };
 }
+
+export interface SeriesPoint {
+  date: string;
+  value: number;
+}
+
+/**
+ * Serie temporal para la gráfica, en orden cronológico y con un punto por día.
+ * - snapshot: el último valor registrado cada día.
+ * - flow: el acumulado hasta ese día.
+ */
+export function buildSeries(def: MetricDefinition, points: readonly MetricPoint[]): SeriesPoint[] {
+  const own = points.filter((p) => p.metricKey === def.key);
+  const byDay = new Map<string, number>();
+  if (def.kind === 'snapshot') {
+    // points llega del más reciente al más antiguo: el primero de cada día es el último registrado.
+    for (const p of own) if (!byDay.has(p.recordedOn)) byDay.set(p.recordedOn, p.value);
+    return [...byDay].map(([date, value]) => ({ date, value })).sort((a, b) => (a.date < b.date ? -1 : 1));
+  }
+  for (const p of own) byDay.set(p.recordedOn, (byDay.get(p.recordedOn) ?? 0) + p.value);
+  let total = 0;
+  return [...byDay]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([date, value]) => ({ date, value: (total += value) }));
+}

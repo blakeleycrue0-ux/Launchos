@@ -7,10 +7,10 @@ import { toUserMessage } from '@/lib/errors';
 import { todayIso } from '@/lib/format';
 import { useAddMetricEntry } from './api';
 
-export function MetricEntryForm({ projectId, path, onDone }: { projectId: string; path: AvailablePath; onDone: () => void }) {
+export function MetricEntryForm({ projectId, path, onDone, initialKey }: { projectId: string; path: AvailablePath; onDone: () => void; initialKey?: string }) {
   const add = useAddMetricEntry(projectId);
   const selectId = useId();
-  const [metricKey, setMetricKey] = useState(path.metrics[0]?.key ?? '');
+  const [metricKey, setMetricKey] = useState(initialKey ?? path.metrics[0]?.key ?? '');
   const [value, setValue] = useState('');
   const [recordedOn, setRecordedOn] = useState(todayIso());
   const [note, setNote] = useState('');
@@ -60,10 +60,10 @@ export function MetricEntryForm({ projectId, path, onDone }: { projectId: string
       </div>
       <TextField label="Nota (opcional)" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
       <div className="row-actions">
-        <Button type="submit" variant="primary" size="sm" loading={add.isPending}>
+        <Button type="submit" variant="primary" loading={add.isPending}>
           Guardar registro
         </Button>
-        <Button size="sm" variant="ghost" onClick={onDone}>
+        <Button variant="ghost" onClick={onDone}>
           Cancelar
         </Button>
       </div>
