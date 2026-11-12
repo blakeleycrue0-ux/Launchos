@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 
-const prefersReducedMotion = () =>
-  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+import { prefersReducedMotion } from './motion';
 
-/** Número que se anima al cambiar de valor. */
-export function AnimatedNumber({ value, duration = 520 }: { value: number; duration?: number }) {
+/** Número que cuenta hasta su nuevo valor y se tiñe de azul un instante al cambiar. */
+export function AnimatedNumber({ value, duration = 620 }: { value: number; duration?: number }) {
   const [display, setDisplay] = useState(value);
   const shown = useRef(value);
+  const el = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const from = shown.current;
@@ -16,6 +16,8 @@ export function AnimatedNumber({ value, duration = 520 }: { value: number; durat
       setDisplay(value);
       return;
     }
+    // De azul al color propio: señala qué cifra acaba de cambiar.
+    el.current?.animate?.([{ color: '#a3adf0' }], { duration: 1400, easing: 'ease-out', direction: 'reverse' });
     const start = performance.now();
     let raf = 0;
     const tick = (now: number) => {
@@ -30,5 +32,5 @@ export function AnimatedNumber({ value, duration = 520 }: { value: number; durat
     return () => cancelAnimationFrame(raf);
   }, [value, duration]);
 
-  return <>{display}</>;
+  return <span ref={el}>{display}</span>;
 }

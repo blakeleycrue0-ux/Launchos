@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AnimatePresence, MotionConfig, motion } from 'motion/react';
+import { AnimatePresence, LayoutGroup, MotionConfig, motion, useMotionValue, useSpring, useTransform, type MotionValue, type Variants } from 'motion/react';
+import { curtain } from '@/components/ui/Curtain';
 import { Icon } from '@/components/ui/Icon';
 import { Logo } from '@/components/ui/Logo';
-import { Spinner } from '@/components/ui/Spinner';
 import { GUIDANCE_QUESTIONS, scorePaths } from '@/content/guidance';
 import { BUDGET_OPTIONS, EXPERIENCE_OPTIONS, STAGE_OPTIONS, WEEKLY_HOURS_OPTIONS, labels } from '@/content/options';
 import { AVAILABLE_PATHS, PLANNED_PATHS, getAvailablePath } from '@/content/paths';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useCreateProject, useProjects } from '@/features/projects/api';
 import { toUserMessage } from '@/lib/errors';
-import { ProjectPreview, usePreviewModel } from './ProjectPreview';
+import { EASE, EASE_IN, SPRING, SPRING_SOFT, prefersReducedMotion, sleep } from './motion';
+import { ProjectPreview, usePreviewModel, type SavePhase } from './ProjectPreview';
 import { EMPTY_DRAFT, buildSteps, firstIncomplete, isStepComplete, type Draft, type StepId } from './steps';
 import './onboarding.css';
 
 const STORAGE_KEY = 'launchos:onboarding-v2';
-const EASE = [0.22, 1, 0.36, 1] as const;
 const GUIDE = '__guide';
 
 interface Stored {
@@ -54,6 +54,7 @@ export function OnboardingPage() {
   const [stepId, setStepId] = useState<StepId>(initial.step);
   const [direction, setDirection] = useState(1);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [phase, setPhase] = useState<SavePhase>('idle');
 
   const path = draft.pathId ? getAvailablePath(draft.pathId) : undefined;
   const steps = useMemo(() => buildSteps(draft, path), [draft, path]);
@@ -120,27 +121,48 @@ export function OnboardingPage() {
   );
 
   async function submit() {
+    if (phase !== 'idle') return;
     const missing = firstIncomplete(steps, draft);
     if (missing) return goTo(missing);
     const { experience, budget, weeklyHours, stage } = draft;
-    if (!path || !experience || !budget || !weeklyHours || !stage) return;
+    if (!path || !model || !experience || !budget || !weeklyHours || !stage) return;
+    const name = draft.name.trim();
+    setPhase('saving');
+    let id: string;
     try {
-      const id = await createProject.mutateAsync({
+      id = await createProject.mutateAsync({
         path,
-        name: draft.name.trim(),
+        name,
         goal: draft.goal.trim(),
         answers: { experience, budget, weeklyHours, stage },
         pathAnswers: draft.pathAnswers,
       });
-      try {
-        sessionStorage.removeItem(STORAGE_KEY);
-      } catch {
-        /* sin almacenamiento */
-      }
-      navigate(`/app/projects/${id}`, { replace: true });
     } catch {
-      /* el error se muestra desde el estado de la mutación */
+      // Sin confirmación no hay celebración: se vuelve al estado normal y el
+      // error (estado de la mutación) se muestra junto al botón para reintentar.
+      setPhase('idle');
+      return;
     }
+    // A partir de aquí Supabase ha confirmado que el proyecto existe.
+    setPhase('done');
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* sin almacenamiento */
+    }
+    const calm = prefersReducedMotion();
+    const desktop = window.matchMedia('(min-width: 901px)').matches;
+    await sleep(calm ? 300 : desktop ? 1150 : 650); // la vista previa termina de construirse
+    curtain.show({
+      eyebrow: 'Proyecto creado',
+      title: name,
+      meta: `${model.total} tareas en ${model.phases.length} fases${model.first ? ` · empiezas por «${model.first.title}»` : ''}`,
+      from: desktop ? 'right' : 'bottom',
+    });
+    await sleep(calm ? 1200 : 2100);
+    navigate(`/app/projects/${id}`, { replace: true });
+    await sleep(650); // el dashboard se monta bajo la cortina antes de levantarla
+    curtain.hide();
   }
 
   const complete = isStepComplete(current, draft);
@@ -148,6 +170,7 @@ export function OnboardingPage() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (phase !== 'idle') return;
     if (isReview) void submit();
     else if (complete) goNext();
   }
@@ -191,10 +214,10 @@ export function OnboardingPage() {
                 )
               }
             />
-            <details className="onb-planned">
+            <motion.details className="onb-planned" variants={ITEM}>
               <summary>{PLANNED_PATHS.length} caminos más en preparación</summary>
               <p>{PLANNED_PATHS.map((p) => p.name).join(' · ')}</p>
-            </details>
+            </motion.details>
           </>
         ),
       };
@@ -234,7 +257,9 @@ export function OnboardingPage() {
             {top.reasons.length > 0 && (
               <ul className="onb-reasons">
                 {top.reasons.map((r) => (
-                  <li key={r}>{r}</li>
+                  <motion.li key={r} variants={ITEM}>
+                    {r}
+                  </motion.li>
                 ))}
               </ul>
             )}
@@ -301,7 +326,7 @@ export function OnboardingPage() {
         question: '¿Cómo se llama tu proyecto?',
         help: 'Podrás cambiarlo cuando quieras.',
         body: (
-          <div className="onb-field">
+          <motion.div className="onb-field" variants={ITEM}>
             <input
               className="onb-input"
               aria-labelledby="onb-question"
@@ -313,7 +338,7 @@ export function OnboardingPage() {
               onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
             />
             <span className="onb-field__count">{draft.name.length}/80</span>
-          </div>
+          </motion.div>
         ),
       };
       break;
@@ -323,7 +348,7 @@ export function OnboardingPage() {
         question: '¿Qué quieres conseguir en tres meses?',
         help: 'Opcional. Lo usamos para personalizar los prompts de tus tareas.',
         body: (
-          <div className="onb-field">
+          <motion.div className="onb-field" variants={ITEM}>
             <textarea
               className="onb-input onb-input--area"
               aria-labelledby="onb-question"
@@ -335,7 +360,7 @@ export function OnboardingPage() {
               onChange={(e) => setDraft((d) => ({ ...d, goal: e.target.value }))}
             />
             <span className="onb-field__count">{draft.goal.length}/500</span>
-          </div>
+          </motion.div>
         ),
       };
       break;
@@ -364,11 +389,12 @@ export function OnboardingPage() {
           <>
             <dl className="onb-review">
               {rows.map((r, i) => (
-                <motion.div key={r.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE, delay: 0.06 + i * 0.035 }}>
+                <motion.div key={r.label} variants={ITEM} custom={i}>
                   <dt>{r.label}</dt>
                   <dd data-missing={!r.value}>{r.value ?? 'Pendiente'}</dd>
                   <button
                     type="button"
+                    disabled={phase !== 'idle'}
                     onClick={() => {
                       returnToReview.current = true;
                       goTo(r.step);
@@ -380,11 +406,13 @@ export function OnboardingPage() {
                 </motion.div>
               ))}
             </dl>
-            {createProject.error && (
-              <p className="onb-error" role="alert">
-                {toUserMessage(createProject.error)}
-              </p>
-            )}
+            <AnimatePresence>
+              {createProject.error && phase === 'idle' && (
+                <motion.p className="onb-error" role="alert" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3, ease: EASE }}>
+                  {toUserMessage(createProject.error)} Tus respuestas siguen guardadas: puedes volver a intentarlo.
+                </motion.p>
+              )}
+            </AnimatePresence>
           </>
         ),
       };
@@ -412,18 +440,36 @@ export function OnboardingPage() {
   }
 
   const hasProjects = (projects.data?.length ?? 0) > 0;
-  const continueLabel = isReview ? 'Crear proyecto' : current === 'goal' && !draft.goal.trim() ? 'Saltar' : 'Continuar';
+  const busy = phase !== 'idle';
+  const nextLabel = phase === 'saving' ? 'Creando proyecto' : phase === 'done' ? 'Proyecto creado' : isReview ? 'Crear proyecto' : current === 'goal' && !draft.goal.trim() ? 'Saltar' : 'Continuar';
   const peek = path && model ? `${model.phases.length} fases · ${model.total} tareas` : draft.mode === 'guided' ? 'Buscando tu camino' : 'Elige un camino';
+  const ratio = (index + 1) / steps.length;
+  const activeKey = current === 'name' || current === 'goal' || current.startsWith('q:') || ['stage', 'experience', 'budget', 'weeklyHours'].includes(current) ? current : undefined;
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="onb">
+      <div className="onb" data-phase={phase}>
         <form className="onb__left" onSubmit={onSubmit} noValidate>
           <header className="onb__bar">
             <Logo to={hasProjects ? '/app' : '/app/new'} size={22} />
             <div className="onb__bar-right">
               <span className="onb__count" aria-label={`Paso ${index + 1} de ${steps.length}`}>
-                <b>{String(index + 1).padStart(2, '0')}</b> / {String(steps.length).padStart(2, '0')}
+                <span className="onb__count-roll">
+                  <AnimatePresence mode="popLayout" custom={direction} initial={false}>
+                    <motion.b
+                      key={index}
+                      custom={direction}
+                      variants={{ enter: (d: number) => ({ y: `${d * 100}%`, opacity: 0 }), center: { y: 0, opacity: 1 }, exit: (d: number) => ({ y: `${d * -100}%`, opacity: 0 }) }}
+                      initial="enter"
+                      animate="center"
+                      exit="exit"
+                      transition={{ duration: 0.4, ease: EASE }}
+                    >
+                      {String(index + 1).padStart(2, '0')}
+                    </motion.b>
+                  </AnimatePresence>
+                </span>{' '}
+                / {String(steps.length).padStart(2, '0')}
               </span>
               {hasProjects ? (
                 <Link to="/app" className="onb__exit">
@@ -437,25 +483,13 @@ export function OnboardingPage() {
             </div>
           </header>
           <div className="onb__progress" role="progressbar" aria-label="Progreso del cuestionario" aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={index + 1}>
-            <motion.div className="onb__progress-bar" animate={{ width: `${((index + 1) / steps.length) * 100}%` }} transition={{ duration: 0.6, ease: EASE }} />
+            {/* scaleX con muelle: avanza de forma continua y solo anima transform. */}
+            <motion.div className="onb__progress-bar" initial={false} animate={{ scaleX: ratio }} transition={SPRING_SOFT} />
           </div>
 
-          <main className="onb__main" id="main">
+          <main className="onb__main" id="main" inert={busy}>
             <AnimatePresence mode="wait" custom={direction} initial={false}>
-              <motion.div
-                key={current}
-                className="onb__step"
-                custom={direction}
-                variants={{
-                  enter: (dir: number) => ({ opacity: 0, x: dir * 28 }),
-                  center: { opacity: 1, x: 0 },
-                  exit: (dir: number) => ({ opacity: 0, x: dir * -28 }),
-                }}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: 0.32, ease: EASE }}
-              >
+              <motion.div key={current} className="onb__step" custom={direction} variants={STEP} initial="enter" animate="center" exit="exit">
                 <StepHeading eyebrow={view.eyebrow} question={view.question} help={view.help} focus={current !== 'name' && current !== 'goal'} />
                 {view.body}
               </motion.div>
@@ -463,45 +497,65 @@ export function OnboardingPage() {
           </main>
 
           <footer className="onb__foot">
-            <button type="button" className="onb-peek" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
+            <motion.button type="button" className="onb-peek" onClick={() => setSheetOpen(true)} aria-haspopup="dialog" whileTap={{ scale: 0.98 }} transition={SPRING}>
               <span className="onb-peek__dot" aria-hidden="true" />
               <span className="onb-peek__label">Vista previa</span>
-              <span className="onb-peek__meta">{peek}</span>
+              <span className="onb-peek__meta">
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.span key={peek} initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -12, opacity: 0 }} transition={{ duration: 0.3, ease: EASE }}>
+                    {peek}
+                  </motion.span>
+                </AnimatePresence>
+              </span>
               <Icon name="arrowRight" size={14} />
-            </button>
+            </motion.button>
             <div className="onb__actions">
-              {index > 0 ? (
-                <button type="button" className="onb-back" onClick={goBack}>
-                  <Icon name="arrowLeft" /> Atrás
-                </button>
-              ) : (
-                <span />
-              )}
-              <button type="submit" className="onb-next" disabled={(!isReview && !complete) || createProject.isPending} aria-busy={createProject.isPending || undefined}>
-                {createProject.isPending && <Spinner />}
-                {continueLabel}
-                {!createProject.isPending && <Icon name="arrowRight" />}
-              </button>
+              <AnimatePresence initial={false}>
+                {index > 0 && !busy && (
+                  <motion.button type="button" className="onb-back" onClick={goBack} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.25, ease: EASE }}>
+                    <Icon name="arrowLeft" /> Atrás
+                  </motion.button>
+                )}
+              </AnimatePresence>
+              <motion.button
+                type="submit"
+                className="onb-next"
+                data-phase={phase}
+                disabled={(!isReview && !complete) || busy}
+                aria-busy={phase === 'saving' || undefined}
+                layout
+                whileTap={busy ? undefined : { scale: 0.97 }}
+                transition={SPRING}
+              >
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.span key={nextLabel} className="onb-next__inner" initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -14, opacity: 0 }} transition={{ duration: 0.28, ease: EASE }}>
+                    {phase === 'saving' && <span className="onb-next__spinner" aria-hidden="true" />}
+                    {phase === 'done' && (
+                      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                        <motion.path d="M4 9.4l3.2 3.2L14 5.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.35, ease: EASE, delay: 0.1 }} />
+                      </svg>
+                    )}
+                    {nextLabel}
+                    {phase === 'idle' && <Icon name="arrowRight" />}
+                  </motion.span>
+                </AnimatePresence>
+              </motion.button>
             </div>
           </footer>
         </form>
 
         <aside className="onb__right" aria-label="Vista previa en directo">
-          <div className="onb-stage" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </div>
+          <Stage progress={ratio} />
           <div className="onb__right-scroll">
             <p className="onb__right-label">Vista previa en directo</p>
-            <ProjectPreview draft={draft} path={path} model={model} />
+            <ProjectPreview draft={draft} path={path} model={model} activeKey={activeKey} phase={phase} />
           </div>
         </aside>
 
         <AnimatePresence>
           {sheetOpen && (
             <PreviewSheet onClose={() => setSheetOpen(false)}>
-              <ProjectPreview draft={draft} path={path} model={model} />
+              <ProjectPreview draft={draft} path={path} model={model} activeKey={activeKey} phase={phase} />
             </PreviewSheet>
           )}
         </AnimatePresence>
@@ -509,6 +563,25 @@ export function OnboardingPage() {
     </MotionConfig>
   );
 }
+
+// ---------------------------------------------------------------- movimiento
+
+/** Paso completo: sale rápido hacia un lado y el siguiente entra en cascada. */
+const STEP: Variants = {
+  enter: (dir: number) => ({ opacity: 0, x: dir * 44 }),
+  center: { opacity: 1, x: 0, transition: { duration: 0.5, ease: EASE, staggerChildren: 0.045, delayChildren: 0.04 } },
+  exit: (dir: number) => ({ opacity: 0, x: dir * -44, transition: { duration: 0.2, ease: EASE_IN } }),
+};
+/** Elementos del paso (ayuda, opciones, campos): suben y aparecen. */
+const ITEM: Variants = {
+  enter: { opacity: 0, y: 18 },
+  center: { opacity: 1, y: 0, transition: { duration: 0.55, ease: EASE } },
+};
+/** Palabras del titular: emergen desde una máscara. */
+const WORD: Variants = {
+  enter: { y: '108%' },
+  center: { y: 0, transition: { duration: 0.7, ease: EASE } },
+};
 
 // ---------------------------------------------------------------------------
 
@@ -519,11 +592,26 @@ function StepHeading({ eyebrow, question, help, focus }: { eyebrow: string; ques
   }, [focus]);
   return (
     <header className="onb__heading">
-      {eyebrow && <p className="onb__eyebrow">{eyebrow}</p>}
-      <h1 id="onb-question" ref={ref} tabIndex={-1} className="onb__question">
-        {question}
+      {eyebrow && (
+        <motion.p className="onb__eyebrow" variants={ITEM}>
+          {eyebrow}
+        </motion.p>
+      )}
+      <h1 id="onb-question" ref={ref} tabIndex={-1} className="onb__question" aria-label={question}>
+        {question.split(' ').map((word, i) => (
+          <span key={i} aria-hidden="true">
+            {i > 0 && ' '}
+            <span className="onb__word">
+              <motion.span variants={WORD}>{word}</motion.span>
+            </span>
+          </span>
+        ))}
       </h1>
-      {help && <p className="onb__help">{help}</p>}
+      {help && (
+        <motion.p className="onb__help" variants={ITEM}>
+          {help}
+        </motion.p>
+      )}
     </header>
   );
 }
@@ -532,6 +620,7 @@ function StepHeading({ eyebrow, question, help, focus }: { eyebrow: string; ques
  * Lista de opciones como grupo de radio nativo.
  * - Clic o tecla numérica: selecciona y avanza.
  * - Flechas o espacio: solo selecciona (Enter continúa).
+ * El relleno azul es un único elemento compartido que se desliza de una opción a otra.
  */
 function ChoiceList<T extends string>({
   labelledBy,
@@ -548,6 +637,8 @@ function ChoiceList<T extends string>({
 }) {
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  // Tras elegir con clic o número, el resto se atenúa mientras se avanza.
+  const [committed, setCommitted] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -558,6 +649,7 @@ function ChoiceList<T extends string>({
       const opt = Number.isInteger(n) && n >= 1 ? options[n - 1] : undefined;
       if (opt) {
         e.preventDefault();
+        setCommitted(true);
         onSelectRef.current(opt.value, true);
       }
     };
@@ -566,39 +658,89 @@ function ChoiceList<T extends string>({
   }, [options]);
 
   return (
-    <div className="onb-choices" role="radiogroup" aria-labelledby={labelledBy}>
-      {options.map((opt, i) => {
-        const selected = value === opt.value;
-        return (
-          <motion.label
-            key={opt.value}
-            className="onb-choice"
-            data-selected={selected}
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.42, ease: EASE, delay: 0.06 + i * 0.05 }}
-            whileTap={{ scale: 0.99 }}
-            onClick={(e) => {
-              // El clic real llega sobre la etiqueta; el del teclado, sobre el input.
-              if ((e.target as HTMLElement).tagName !== 'INPUT') onSelect(opt.value, true);
-            }}
-          >
-            <input type="radio" name={`onb-${name}`} value={opt.value} checked={selected} onChange={() => onSelect(opt.value, false)} />
-            <span className="onb-choice__key" aria-hidden="true">
-              {i + 1}
-            </span>
-            <span className="onb-choice__text">
-              <span className="onb-choice__label">{opt.label}</span>
-              {opt.description && <span className="onb-choice__desc">{opt.description}</span>}
-            </span>
-            {opt.meta && <span className="onb-choice__meta">{opt.meta}</span>}
-            <span className="onb-choice__check" aria-hidden="true">
-              <Icon name="check" size={13} />
-            </span>
-          </motion.label>
-        );
-      })}
+    <LayoutGroup id={`choices-${name}`}>
+      <div className="onb-choices" role="radiogroup" aria-labelledby={labelledBy} data-committed={committed}>
+        {options.map((opt, i) => {
+          const selected = value === opt.value;
+          return (
+            <motion.label
+              key={opt.value}
+              className="onb-choice"
+              data-selected={selected}
+              variants={ITEM}
+              whileTap={{ scale: 0.985 }}
+              onClick={(e) => {
+                // El clic real llega sobre la etiqueta; el del teclado, sobre el input.
+                if ((e.target as HTMLElement).tagName !== 'INPUT') {
+                  setCommitted(true);
+                  onSelect(opt.value, true);
+                }
+              }}
+            >
+              {selected && <motion.span layoutId="fill" className="onb-choice__fill" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={SPRING} aria-hidden="true" />}
+              <input type="radio" name={`onb-${name}`} value={opt.value} checked={selected} onChange={() => onSelect(opt.value, false)} />
+              <span className="onb-choice__key" aria-hidden="true">
+                {i + 1}
+              </span>
+              <span className="onb-choice__text">
+                <span className="onb-choice__label">{opt.label}</span>
+                {opt.description && <span className="onb-choice__desc">{opt.description}</span>}
+              </span>
+              {opt.meta && <span className="onb-choice__meta">{opt.meta}</span>}
+              <span className="onb-choice__check" aria-hidden="true">
+                {selected && (
+                  <svg width="14" height="14" viewBox="0 0 14 14">
+                    <motion.path d="M3 7.3l2.6 2.6L11 4.4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.28, ease: EASE, delay: 0.06 }} />
+                  </svg>
+                )}
+              </span>
+            </motion.label>
+          );
+        })}
+      </div>
+    </LayoutGroup>
+  );
+}
+
+/**
+ * Fondo de la columna oscura: tres planos inclinados (eco del símbolo) en capas.
+ * - Deriva ambiental muy lenta (CSS, solo transform).
+ * - Se desplazan a distinta velocidad al avanzar pasos y, con ratón, al mover el puntero.
+ */
+function Stage({ progress }: { progress: number }) {
+  const mx = useMotionValue(0);
+  const my = useMotionValue(0);
+  const sx = useSpring(mx, { stiffness: 36, damping: 18 });
+  const sy = useSpring(my, { stiffness: 36, damping: 18 });
+  const p = useSpring(progress, { stiffness: 50, damping: 20 });
+  useEffect(() => p.set(progress), [p, progress]);
+
+  useEffect(() => {
+    if (prefersReducedMotion() || !window.matchMedia('(pointer: fine)').matches) return;
+    const onMove = (e: PointerEvent) => {
+      mx.set(e.clientX / window.innerWidth - 0.5);
+      my.set(e.clientY / window.innerHeight - 0.5);
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    return () => window.removeEventListener('pointermove', onMove);
+  }, [mx, my]);
+
+  return (
+    <div className="onb-stage" aria-hidden="true">
+      <Plane n={1} sx={sx} sy={sy} p={p} depth={14} travel={[-26, 34]} />
+      <Plane n={2} sx={sx} sy={sy} p={p} depth={-22} travel={[30, -44]} />
+      <Plane n={3} sx={sx} sy={sy} p={p} depth={38} travel={[-48, -70]} />
     </div>
+  );
+}
+
+function Plane({ n, sx, sy, p, depth, travel }: { n: number; sx: MotionValue<number>; sy: MotionValue<number>; p: MotionValue<number>; depth: number; travel: [number, number] }) {
+  const x = useTransform([sx, p] as MotionValue<number>[], ([m, k]: number[]) => (m ?? 0) * depth + (k ?? 0) * travel[0]);
+  const y = useTransform([sy, p] as MotionValue<number>[], ([m, k]: number[]) => (m ?? 0) * depth + (k ?? 0) * travel[1]);
+  return (
+    <motion.div className={`onb-plane onb-plane--${n}`} style={{ x, y }}>
+      <i />
+    </motion.div>
   );
 }
 
@@ -619,13 +761,12 @@ function PreviewSheet({ onClose, children }: { onClose: () => void; children: Re
 
   return (
     <div className="onb-sheet" role="dialog" aria-modal="true" aria-label="Vista previa de tu proyecto">
-      <motion.div className="onb-sheet__backdrop" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} />
+      <motion.div className="onb-sheet__backdrop" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} />
       <motion.div
         className="onb-sheet__panel"
         initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ duration: 0.45, ease: EASE }}
+        animate={{ y: 0, transition: { type: 'spring', stiffness: 330, damping: 36, mass: 0.9 } }}
+        exit={{ y: '100%', transition: { duration: 0.32, ease: EASE_IN } }}
         drag="y"
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={{ top: 0, bottom: 0.6 }}

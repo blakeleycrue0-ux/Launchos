@@ -9,6 +9,7 @@ import './styles/base.css';
 import './styles/components.css';
 import './styles/layout.css';
 import './styles/app.css';
+import { Curtain } from './components/ui/Curtain';
 import { ConfigErrorScreen } from './app/ConfigErrorScreen';
 import { envStatus } from './lib/supabase';
 
@@ -35,6 +36,7 @@ if (!envStatus.ok) {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <RouterProvider router={router} />
+            <Curtain />
           </AuthProvider>
         </QueryClientProvider>
       </StrictMode>,
