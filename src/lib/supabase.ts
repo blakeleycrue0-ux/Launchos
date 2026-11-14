@@ -1,24 +1,24 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from './database.types';
-import { readEnv } from './env';
+import 'react-native-url-polyfill/auto';
+import { createClient } from '@supabase/supabase-js';
+import { AppState, Platform } from 'react-native';
+import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from './config';
+import { secureStorage } from './secureStorage';
 
-export type TypedSupabaseClient = SupabaseClient<Database>;
-
-const env = readEnv();
-
-/**
- * Cliente único de Supabase. Es null si faltan variables de entorno; en ese
- * caso la app muestra una pantalla de configuración en lugar de fallar.
- */
-export const supabase: TypedSupabaseClient | null = env.ok
-  ? createClient<Database>(env.supabaseUrl, env.supabaseKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+/** Sólo se usa la clave pública (anon). La service_role NUNCA debe estar en la app. */
+export const supabase = isSupabaseConfigured
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        storage: secureStorage,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: Platform.OS === 'web',
+      },
     })
   : null;
 
-export const envStatus = env;
-
-export function getSupabase(): TypedSupabaseClient {
-  if (!supabase) throw new Error('Supabase no está configurado');
-  return supabase;
+if (supabase && Platform.OS !== 'web') {
+  AppState.addEventListener('change', (s) => {
+    if (s === 'active') supabase.auth.startAutoRefresh();
+    else supabase.auth.stopAutoRefresh();
+  });
 }

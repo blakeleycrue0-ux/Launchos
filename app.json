@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Mio",
+    "slug": "mio",
+    "scheme": "mio",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#09090A",
+    "icon": "./assets/icon.png",
+    "ios": { "supportsTablet": false, "bundleIdentifier": "app.mio.finance" },
+    "android": {
+      "package": "app.mio.finance",
+      "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#09090A" }
+    },
+    "web": { "bundler": "metro", "output": "single", "favicon": "./assets/icon.png" },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      "expo-localization",
+      ["expo-splash-screen", { "backgroundColor": "#09090A", "image": "./assets/icon.png", "imageWidth": 140 }]
+    ],
+    "experiments": {}
+  }
+}

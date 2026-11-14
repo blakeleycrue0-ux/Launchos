@@ -1,87 +1,33 @@
-# LaunchOS
+# MIO — finanzas personales
 
-LaunchOS es un sistema operativo para emprendedores digitales: ayuda a elegir qué construir, evaluar tu punto de partida, seguir un roadmap personalizado con tareas reales y medir resultados.
+*Tu dinero. Tus planes. Todo claro.* App móvil (iOS y Android) con React Native + Expo + TypeScript.
 
-> Estado: **primera versión completa de la aplicación**, pendiente de publicar. Landing, autenticación, onboarding, resumen del proyecto, roadmap, tareas, métricas con gráficas, proyectos y cuenta. Tres caminos disponibles: **Faceless content**, **Reventa en Vinted** y **Apps & SaaS**. El resto aparece como "En preparación".
-
-## Pantallas
-
-| Ruta | Pantalla |
-|---|---|
-| `/` | Landing con demostración interactiva |
-| `/login`, `/signup`, `/forgot-password`, `/reset-password` | Autenticación |
-| `/app/new` | Onboarding (una pregunta por paso, vista previa en directo) |
-| `/app/projects/:id` | Resumen: progreso, próxima acción, resultados, fase actual y actividad |
-| `/app/projects/:id/roadmap` | Roadmap por fases con filtros |
-| `/app/projects/:id/tasks/:taskId` | Tarea: pasos, herramientas, prompts, notas y estado |
-| `/app/projects/:id/metrics` | Métricas: gráficas, registro e historial |
-| `/app/projects`, `/app/account` | Proyectos y cuenta |
-
-## Stack
-
-React 19 · TypeScript · Vite · React Router · TanStack Query · Motion · Supabase (Auth, Postgres, RLS) · Netlify.
-Las decisiones y el modelo de datos están en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-## Puesta en marcha local
-
-Requisitos: Node 20 o superior.
+## Arrancar
 
 ```bash
 npm install
-cp .env.example .env.local   # rellena VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY
-npm run dev
+npx expo start          # escanea el QR con Expo Go, o pulsa i / a / w
+npm test                # 69 tests de dominio, datos local e i18n
+npm run test:db         # migración SQL + RLS en un PostgreSQL embebido (PGlite)
+npm run typecheck
 ```
 
-Sin variables de entorno, la app muestra una pantalla que explica qué falta configurar.
+Sin configuración, MIO arranca en **modo local**: sin cuenta, datos solo en el dispositivo.
+Para activar cuentas de usuario copia `.env.example` a `.env` y rellena la URL y la clave **pública** (anon) de tu proyecto Supabase,
+y aplica `supabase/migrations/*.sql` (ver `docs/PLAN.md` → «Pendiente de ti»).
 
-## Base de datos
+## Estado de la Fase 1 (qué está probado y qué no)
 
-El esquema está en `supabase/migrations/`. Para aplicarlo en un proyecto **dedicado** a LaunchOS:
-
-- **SQL Editor de Supabase**: pega y ejecuta el contenido de `supabase/migrations/20261111120000_initial_schema.sql`.
-- **CLI**: `npx supabase link --project-ref <ref>` y después `npx supabase db push`.
-
-Configuración en Supabase → Authentication → URL Configuration:
-- **Site URL**: la URL de Netlify (p. ej. `https://launchos-8hq2.netlify.app`).
-- **Redirect URLs**: `https://<tu-dominio>/app`, `https://<tu-dominio>/reset-password` y `http://localhost:5173/**` para desarrollo local.
-
-## Despliegue en Netlify
-
-`netlify.toml` ya define el build (`npm run build`), la carpeta publicada (`dist`), el redirect del SPA y las cabeceras de seguridad. Solo falta añadir en *Site configuration → Environment variables*:
-
-| Variable | Valor |
+| Funcionalidad | Estado |
 |---|---|
-| `VITE_SUPABASE_URL` | URL del proyecto de Supabase |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | clave publicable (`sb_publishable_…`) o clave anon |
-
-Ambas son públicas por diseño (acaban en el navegador). **Nunca** uses la clave `service_role` ni una `sb_secret_…` en el frontend ni la subas al repositorio.
-
-## Scripts
-
-| Script | Qué hace |
-|---|---|
-| `npm run dev` | Servidor de desarrollo |
-| `npm run build` | Typecheck y build de producción |
-| `npm run typecheck` | Solo TypeScript |
-| `npm run lint` | ESLint |
-| `npm test` | Tests (Vitest) |
-| `npm run check` | Typecheck, lint y tests |
-
-## Añadir un camino de negocio
-
-1. Crea `src/content/paths/<id>.ts` exportando un `AvailablePath` (fases, tareas, preguntas y métricas).
-2. Regístralo en `AVAILABLE_PATHS` y quítalo de `PLANNED_PATHS` en `src/content/paths/index.ts`.
-3. Ejecuta `npm test`: los tests de contenido comprueban que las claves son únicas, que las condiciones apuntan a preguntas existentes y que las URLs son https.
-
-Las `key` de las tareas son permanentes: la base de datos las referencia.
-
-## Identidad
-
-- Tipografía: Geist y Geist Mono (autoalojadas).
-- Color: negro profundo, blanco, grises y azul índigo `#3A4CC0` como acento.
-- Logo: `public/brand/` (símbolo como máscara con transparencia e icono de app), configurado en `src/config/brand.ts`.
-- Movimiento: Motion, con `prefers-reduced-motion` respetado en toda la app.
-
-## Reseñas en la landing
-
-`REVIEWS` en `src/features/landing/LandingPage.tsx` debe contener solo opiniones reales. Mientras esté vacío, la sección lo indica de forma explícita.
+| Sistema de diseño, tema claro/oscuro/auto, ES/EN | Implementado; recorrido en navegador (web) en claro y oscuro |
+| Onboarding de 4 pasos con progreso guardado | Implementado y probado (web) |
+| Cuentas manuales, saldo calculado, transferencias | Implementado; lógica con tests; flujo probado (web) |
+| Registrar / editar / borrar movimientos, teclado numérico, búsqueda, filtros, CSV | Implementado; flujo probado (web) |
+| **Disponible para gastar** | Implementado: saldo de cuentas gastables − reservas. Las reservas (pagos, deudas, ahorro) valen 0 hasta las Fases 2–3 |
+| Mascota animada (parpadeo, flotación, expresiones) | Implementada; verificada visualmente en web |
+| Esquema SQL + RLS + borrar cuenta | Probado con PGlite (aislamiento entre usuarios, FKs compuestas, idempotencia, borrado en cascada) |
+| Auth Supabase (email, login, recuperar, cerrar sesión, eliminar cuenta) | Implementado; **no probado contra un proyecto real** (solo validaciones y errores de red) |
+| Háptica, safe areas, Dynamic Island, teclado | Implementado con APIs nativas; **no probado en iPhone/Android físicos** |
+| Apple / Google Sign In | **No implementado** (ver `docs/PLAN.md`) |
+| Asistente de IA, ¿Puedo comprarlo?, pagos recurrentes, grupos, pareja, objetivos, estadísticas, notificaciones, suscripción | Fases 2–4, **aún no construidos** |
