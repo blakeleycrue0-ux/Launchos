@@ -1,139 +1,59 @@
-/**
- * Tipos del dominio de LaunchOS.
- *
- * El contenido de cada camino (fases, tareas, instrucciones, métricas) se define
- * en código (src/content/paths) y se referencia desde la base de datos por clave.
- */
+/** Importe en unidades monetarias menores (céntimos). Siempre entero. */
+export type Minor = number;
+/** Fecha de calendario local YYYY-MM-DD (sin zona horaria, para evitar desfases). */
+export type ISODate = string;
 
-export type Experience = 'none' | 'some' | 'experienced';
-export type Budget = 'zero' | 'low' | 'medium' | 'high';
-export type WeeklyHours = 'h0_5' | 'h5_10' | 'h10_20' | 'h20_plus';
-export type Stage = 'idea' | 'started' | 'earning';
+export type TxKind = 'expense' | 'income' | 'transfer' | 'adjustment' | 'refund' | 'debt_payment';
+export type AccountKind = 'bank' | 'cash' | 'savings' | 'other';
 
-export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'skipped';
-export type ProjectStatus = 'active' | 'paused' | 'archived';
-
-/** Respuestas comunes a todos los caminos. */
-export interface ProfileAnswers {
-  experience: Experience;
-  budget: Budget;
-  weeklyHours: WeeklyHours;
-  stage: Stage;
-}
-
-/** Respuestas a preguntas específicas de un camino. */
-export type PathAnswers = Record<string, string>;
-
-export interface RoadmapContext extends ProfileAnswers {
-  pathAnswers: PathAnswers;
-}
-
-/**
- * Condición declarativa para incluir una tarea en el roadmap.
- * Todas las claves presentes deben cumplirse (AND); dentro de cada clave
- * basta con que el valor esté en la lista (OR).
- */
-export interface TaskCondition {
-  experience?: Experience[];
-  budget?: Budget[];
-  weeklyHours?: WeeklyHours[];
-  stage?: Stage[];
-  answers?: Record<string, string[]>;
-}
-
-export interface ExternalTool {
-  name: string;
-  url: string;
-  /** Para qué se usa en esta tarea. */
-  purpose: string;
-  pricing: 'free' | 'freemium' | 'paid';
-}
-
-export interface TaskPrompt {
-  title: string;
-  /** Texto del prompt. Puede contener {{variables}} que se rellenan con el proyecto. */
-  body: string;
-}
-
-export interface TaskTemplate {
-  /** Clave estable. NUNCA cambiarla una vez publicada: la BD la referencia. */
-  key: string;
-  title: string;
-  summary: string;
-  estimatedMinutes: number;
-  /** Pasos accionables, en orden. */
-  steps: string[];
-  /** Cómo saber que la tarea está terminada. */
-  doneWhen: string;
-  tools?: ExternalTool[];
-  prompts?: TaskPrompt[];
-  tips?: string[];
-  when?: TaskCondition;
-  /** Si el usuario ya está en una etapa avanzada, la tarea se marca como hecha al crear el proyecto. */
-  autoCompleteWhen?: TaskCondition;
-}
-
-export interface Phase {
-  key: string;
-  title: string;
-  description: string;
-  tasks: TaskTemplate[];
-}
-
-export interface PathQuestionOption {
-  value: string;
-  label: string;
-  description?: string;
-}
-
-export interface PathQuestion {
-  key: string;
-  label: string;
-  help?: string;
-  options: PathQuestionOption[];
-}
-
-export type MetricUnit = 'count' | 'currency' | 'percent';
-
-export interface MetricDefinition {
-  key: string;
-  label: string;
-  unit: MetricUnit;
-  help: string;
-  /**
-   * 'snapshot': el valor es el total en esa fecha (p. ej. suscriptores).
-   * 'flow': el valor es lo ocurrido en ese periodo y se suma (p. ej. ventas).
-   */
-  kind: 'snapshot' | 'flow';
-}
-
-interface PathBase {
+export interface Account {
   id: string;
   name: string;
-  tagline: string;
-  category: 'content' | 'commerce' | 'services' | 'software';
+  kind: AccountKind;
+  initialBalanceMinor: Minor;
+  currency: string;
+  archived: boolean;
+  createdAt: string;
 }
 
-export interface AvailablePath extends PathBase {
-  status: 'available';
+export interface Category {
+  id: string;
+  /** Clave de las categorías iniciales (traducibles). null en las personalizadas. */
+  key: string | null;
+  name: string | null;
+  icon: string;
+  archived: boolean;
+}
+
+export interface Transaction {
+  id: string;
+  kind: TxKind;
+  /** > 0 salvo en 'adjustment', donde es la diferencia con signo. */
+  amountMinor: Minor;
+  occurredOn: ISODate;
+  accountId: string;
+  /** Sólo en transferencias entre cuentas propias. */
+  toAccountId: string | null;
+  categoryId: string | null;
   description: string;
-  /** Incrementar al cambiar el roadmap de forma significativa. */
-  contentVersion: number;
-  idealFor: string[];
-  questions: PathQuestion[];
-  phases: Phase[];
-  metrics: MetricDefinition[];
+  notes: string;
+  isRecurring: boolean;
+  createdAt: string;
 }
 
-export interface PlannedPath extends PathBase {
-  status: 'planned';
+export interface Profile {
+  id: string;
+  displayName: string;
+  currency: string;
+  monthlyIncomeMinor: Minor;
+  intents: string[];
+  onboardingStep: number;
+  onboardingDone: boolean;
 }
 
-export type BusinessPath = AvailablePath | PlannedPath;
-
-export interface GeneratedTask {
-  templateKey: string;
-  phaseKey: string;
-  position: number;
-  status: TaskStatus;
+export interface Snapshot {
+  profile: Profile;
+  accounts: Account[];
+  categories: Category[];
+  transactions: Transaction[];
 }
