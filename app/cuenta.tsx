@@ -14,8 +14,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { Button } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
 import { Field } from '@/ui/Field';
-import { Icon } from '@/ui/Icon';
-import { PressableScale } from '@/ui/PressableScale';
+import { Header } from '@/ui/Header';
 import { Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
 
@@ -55,12 +54,8 @@ export default function AccountModal() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen contentStyle={{ gap: 18 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <PressableScale onPress={() => router.back()} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel={t('common.close')}><Icon name="close" size={20} color={c.ink} /></PressableScale>
-          <Text variant="headline">{acc ? t('acc.edit') : t('acc.new')}</Text>
-          <View style={{ width: 44 }} />
-        </View>
+      <Screen contentStyle={{ gap: 14 }}>
+        <Header close backLabel={t('common.close')} title={acc ? t('acc.edit') : t('acc.new')} />
         <Field label={t('acc.name')} value={name} onChangeText={(v) => { setName(v); setError(null); }} maxLength={40} testID="acc-name" autoFocus={!acc} />
         <View style={{ gap: 8 }}>
           <Text variant="caption" tone="soft" style={{ marginLeft: 4 }}>{t('acc.kind')}</Text>
@@ -74,6 +69,7 @@ export default function AccountModal() {
       </Screen>
       <View style={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 12, gap: 6 }}>
         <Button label={t('common.save')} onPress={submit} testID="acc-save" />
+        {acc && !acc.archived ? <Button variant="secondary" icon="scale" label={t('acc.adjust')} onPress={() => router.replace({ pathname: '/movimiento/nuevo', params: { kind: 'adjustment', account: acc.id } })} testID="acc-adjust" /> : null}
         {acc ? <Button variant="ghost" label={acc.archived ? t('acc.restore') : t('acc.archive')} onPress={toggleArchive} /> : null}
       </View>
     </KeyboardAvoidingView>

@@ -233,3 +233,35 @@ describe('exportación CSV', () => {
     expect(minorToEditText(300)).toBe('3');
   });
 });
+
+describe('formato de dinero', () => {
+  const f = (m: number, o?: object, l = 'es-ES') => formatMoney(m, 'EUR', l, o).replace(/ /g, ' ');
+  it('agrupa miles también con 4 cifras', () => expect(f(108750)).toBe('1.087,50 €'));
+  it('millones', () => expect(f(123456789)).toBe('1.234.567,89 €'));
+  it('negativos y signo explícito', () => { expect(f(-350)).toBe('-3,50 €'); expect(f(350, { sign: true })).toBe('+3,50 €'); expect(f(0, { sign: true })).toBe('0,00 €'); });
+  it('inglés', () => expect(f(108750, {}, 'en-GB')).toBe('€1,087.50'));
+  it('sin decimales', () => expect(formatMoney(1500, 'JPY').replace(/ /g, ' ')).toBe('1.500 ¥'));
+});
+
+import { simulatePurchase } from '../purchase';
+import { answerQuestion } from '../assistant';
+describe('¿puedo comprarlo? (simulación)', () => {
+  it('encaja con margen', () => expect(simulatePurchase(108750, 18000)).toMatchObject({ after: 90750, remainingPct: 83, verdict: 'fits' }));
+  it('margen reducido por debajo del 25 %', () => expect(simulatePurchase(100000, 80000)).toMatchObject({ after: 20000, remainingPct: 20, verdict: 'tight' }));
+  it('justo en el 25 % encaja', () => expect(simulatePurchase(100000, 75000).verdict).toBe('fits'));
+  it('gastarlo todo deja margen cero', () => expect(simulatePurchase(5000, 5000)).toMatchObject({ after: 0, verdict: 'tight' }));
+  it('no alcanza', () => expect(simulatePurchase(10000, 18000)).toMatchObject({ after: -8000, verdict: 'no', remainingPct: 0 }));
+  it('disponible negativo', () => expect(simulatePurchase(-500, 100).verdict).toBe('no'));
+  it('precio inválido', () => { expect(() => simulatePurchase(1000, 0)).toThrow(); expect(() => simulatePurchase(1000, 1.5)).toThrow(); });
+});
+describe('asistente: respuestas calculadas', () => {
+  const facts = { available: 100000, totalMoney: 150000, currency: 'EUR', month: { income: 200000, spending: 34500, net: 165500, byCategory: { food: 30000, bus: 4500 } } };
+  it('gasto del mes', () => expect(answerQuestion('¿Cuánto he gastado este mes?', facts)).toEqual({ kind: 'spent', amount: 34500 }));
+  it('categoría principal', () => expect(answerQuestion('¿En qué gasto más dinero?', facts)).toEqual({ kind: 'topCategory', categoryId: 'food', amount: 30000 }));
+  it('ingresos', () => expect(answerQuestion('ingresos de este mes', facts)).toEqual({ kind: 'income', amount: 200000 }));
+  it('disponible', () => expect(answerQuestion('¿Cuánto puedo gastar?', facts)).toEqual({ kind: 'available', amount: 100000 }));
+  it('compra con precio', () => expect(answerQuestion('¿Puedo comprar algo de 200 €?', facts)).toMatchObject({ kind: 'purchase', sim: { after: 80000, verdict: 'fits' } }));
+  it('precio con decimales', () => expect(answerQuestion('puedo comprar unos cascos de 179,99', facts)).toMatchObject({ kind: 'purchase', sim: { price: 17999 } }));
+  it('sin gastos no inventa categoría', () => expect(answerQuestion('en que gasto mas', { ...facts, month: { ...facts.month, byCategory: {} } })).toEqual({ kind: 'noSpending' }));
+  it('pregunta desconocida no inventa nada', () => expect(answerQuestion('¿qué tiempo hace?', facts)).toEqual({ kind: 'unknown' }));
+});

@@ -51,9 +51,26 @@ export interface Profile {
   onboardingDone: boolean;
 }
 
+export type GroupKind = 'travel' | 'couple' | 'home' | 'friends' | 'event' | 'other';
+
+export interface Group {
+  id: string;
+  name: string;
+  kind: GroupKind;
+  /** Clave de una fotografía predeterminada incluida en la app, o null. */
+  photoPreset: string | null;
+  /** Fotografía subida por el usuario (URI local del dispositivo), o null. */
+  photoUri: string | null;
+  currency: string;
+  /** Presupuesto opcional; 0 = sin presupuesto. */
+  budgetMinor: Minor;
+  createdAt: string;
+}
+
 export interface Snapshot {
   profile: Profile;
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];
+  groups: Group[];
 }

@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDeleteTransaction, useFinance, useSaveTransaction } from '@/data/hooks';
 import { adjustmentDelta, effectOnAccount } from '@/domain/balance';
@@ -14,22 +14,27 @@ import { haptic } from '@/lib/haptics';
 import { newId } from '@/lib/id';
 import { confirm } from '@/lib/platform';
 import { useTheme } from '@/theme/ThemeProvider';
+import { fonts, radii } from '@/theme/tokens';
 import { Button } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
-import { Field } from '@/ui/Field';
+import { Header, IconButton } from '@/ui/Header';
 import { Icon } from '@/ui/Icon';
 import { Numpad } from '@/ui/Numpad';
 import { PressableScale } from '@/ui/PressableScale';
+import { Segmented } from '@/ui/Segmented';
 import { Sheet } from '@/ui/Sheet';
+import { Toggle } from '@/ui/Toggle';
+import { noOutline } from '@/ui/Field';
 import { Text } from '@/ui/Text';
 import { categoryLabel, dayLabel } from './labels';
 
-const KINDS: TxKind[] = ['expense', 'income', 'transfer', 'refund', 'adjustment'];
+const KINDS: TxKind[] = ['expense', 'income', 'transfer', 'refund'];
+const ALL_KINDS: TxKind[] = [...KINDS, 'adjustment'];
 
 /** Alta y edición de movimientos: importe → categoría → guardar. */
 export function TxEditor({ id }: { id?: string }) {
   const f = useFinance();
-  const params = useLocalSearchParams<{ kind?: string }>();
+  const params = useLocalSearchParams<{ kind?: string; account?: string }>();
   const { t, intl, decimalSep } = useT();
   const c = useTheme();
   const insets = useSafeAreaInsets();
@@ -40,8 +45,8 @@ export function TxEditor({ id }: { id?: string }) {
 
   const cur = f?.profile.currency ?? 'EUR';
   const exp = currencyExponent(cur);
-  const firstAccount = f?.activeAccounts[0]?.id ?? '';
-  const initialKind = (editing?.kind ?? (KINDS.includes(params.kind as TxKind) ? (params.kind as TxKind) : 'expense')) as TxKind;
+  const firstAccount = f?.activeAccounts.find((a) => a.id === params.account)?.id ?? f?.activeAccounts[0]?.id ?? '';
+  const initialKind = (editing?.kind ?? (ALL_KINDS.includes(params.kind as TxKind) ? (params.kind as TxKind) : 'expense')) as TxKind;
 
   const [kind, setKind] = useState<TxKind>(initialKind);
   const [amount, setAmount] = useState('');
@@ -71,7 +76,7 @@ export function TxEditor({ id }: { id?: string }) {
   const isTransfer = kind === 'transfer';
   const accounts = f.activeAccounts;
   const accName = (x: string | null) => f.accounts.find((a) => a.id === x)?.name ?? '—';
-  const small = height < 700;
+  const small = height < 720;
 
   const onKey = (k: NumpadKey) => { setError(null); setAmount((a) => pressKey(a, k, exp)); };
   const shiftDate = (d: number) => { haptic.select(); setDate((x) => addDays(x, d)); };
@@ -107,89 +112,103 @@ export function TxEditor({ id }: { id?: string }) {
 
   const catRow = !isTransfer && !isAdjust;
   const display = displayInput(amount, decimalSep);
+  const toId = toAccountId ?? accounts.find((a) => a.id !== accountId)?.id ?? null;
+  const line = { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.line };
+  const inputStyle = [{ flex: 1, color: c.ink, fontFamily: fonts[500], fontSize: 15, paddingVertical: 0, height: 46 }, noOutline] as const;
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 20, gap: 12 }}>
-        <View style={styles.top}>
-          <PressableScale onPress={() => router.back()} style={[styles.close, { backgroundColor: c.surfaceAlt }]} accessibilityRole="button" accessibilityLabel={t('common.close')} testID="tx-close"><Icon name="close" size={20} color={c.ink} /></PressableScale>
-          <Text variant="headline">{editing ? t('add.edit') : t('add.title')}</Text>
-          {editing ? (
-            <PressableScale onPress={doDelete} style={[styles.close, { backgroundColor: c.surfaceAlt }]} accessibilityRole="button" accessibilityLabel={t('common.delete')} testID="tx-delete"><Icon name="trash" size={20} color={c.ink} /></PressableScale>
-          ) : <View style={styles.close} />}
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {KINDS.map((k) => (
-            <Chip key={k} label={t(`kind.${k}` as TKey)} selected={k === kind} testID={`kind-${k}`} onPress={() => { setKind(k); setError(null); if (k === 'transfer' || k === 'adjustment') setCategoryId(null); }} />
-          ))}
-        </ScrollView>
+        <Header close backLabel={t('common.close')} title={editing ? t('add.edit') : t('add.title')}
+          right={editing ? <IconButton icon="trash" label={t('common.delete')} onPress={doDelete} testID="tx-delete" /> : undefined} />
+        {isAdjust ? null : (
+          <Segmented<TxKind> value={kind} options={KINDS.map((k) => ({ value: k, label: t(`kind.${k}` as TKey) }))}
+            onChange={(k) => { setKind(k); setError(null); if (k === 'transfer') setCategoryId(null); }} />
+        )}
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, gap: 14 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <View style={{ alignItems: 'center', paddingVertical: small ? 4 : 12 }} accessibilityRole="text" accessibilityLabel={`${t('add.amount')} ${display} ${currencySymbol(cur, intl)}`}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: small ? 6 : 14, paddingBottom: 8, gap: 12 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View style={{ alignItems: 'center', gap: 2 }} accessibilityRole="text" accessibilityLabel={`${t('add.amount')} ${display} ${currencySymbol(cur, intl)}`}>
           {isAdjust ? <Text variant="caption" tone="soft">{t('add.realBalance', { account: accName(accountId) })}</Text> : null}
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-            <Text variant="amount" testID="amount-display" style={{ fontSize: small ? 52 : 64, lineHeight: small ? 58 : 70, color: amount ? c.ink : c.inkFaint }} adjustsFontSizeToFit numberOfLines={1}>{display}</Text>
-            <Text variant="title" tone="soft">{currencySymbol(cur, intl)}</Text>
+            <Text variant="amount" testID="amount-display" style={{ fontSize: small ? 40 : 46, lineHeight: small ? 46 : 52, color: amount ? c.ink : c.inkFaint }} adjustsFontSizeToFit numberOfLines={1}>{display}</Text>
+            <Text variant="headline" style={{ color: c.accent, fontSize: 20 }}>{currencySymbol(cur, intl)}</Text>
           </View>
           {isAdjust && amount ? <Text variant="caption" tone="soft">{t('add.adjustDiff', { diff: formatMoney(amountMinor, cur, intl, { sign: true }) })}</Text> : null}
         </View>
 
         {catRow ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ marginHorizontal: -20 }}>
-            <View style={{ width: 12 }} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingHorizontal: 20 }} style={{ marginHorizontal: -20 }}>
             {f.categories.map((cat) => (
               <Chip key={cat.id} icon={cat.icon} label={categoryLabel(cat, t)} selected={cat.id === categoryId} testID={`cat-${cat.key ?? cat.name}`} onPress={() => setCategoryId(cat.id === categoryId ? null : cat.id)} />
             ))}
-            <View style={{ width: 12 }} />
           </ScrollView>
         ) : null}
 
-        <View style={styles.metaRow}>
-          <Chip icon="wallet" label={accName(accountId)} trailing="chevron-down" onPress={() => setSheet('from')} testID="account-chip" />
-          {isTransfer ? <><Icon name="arrow-up-right" size={16} color={c.inkFaint} /><Chip icon="wallet" label={accName(toAccountId ?? accounts.find((a) => a.id !== accountId)?.id ?? null)} trailing="chevron-down" onPress={() => setSheet('to')} testID="to-account-chip" /></> : null}
-          <View style={{ flex: 1 }} />
-          <View style={[styles.date, { backgroundColor: c.surfaceAlt }]}>
-            <PressableScale onPress={() => shiftDate(-1)} accessibilityLabel={t('add.prevDay')} style={styles.dateBtn}><Icon name="chevron-left" size={16} color={c.ink} /></PressableScale>
-            <Text variant="caption" style={{ fontWeight: '700', minWidth: 62, textAlign: 'center' }} testID="date-label">{dayLabel(date, t, intl)}</Text>
-            <PressableScale onPress={() => shiftDate(1)} accessibilityLabel={t('add.nextDay')} style={styles.dateBtn}><Icon name="chevron-right" size={16} color={c.ink} /></PressableScale>
+        <View style={[styles.form, { backgroundColor: c.surface, borderColor: c.line }]}>
+          <PressableScale onPress={() => setSheet('from')} scaleTo={0.99} style={[styles.formRow, line]} testID="account-chip" accessibilityRole="button" accessibilityLabel={t('add.account')}>
+            <Icon name="wallet" size={17} color={c.inkSoft} />
+            <Text tone="soft" style={{ flex: 1 }}>{isTransfer ? t('add.fromAccount') : t('add.account')}</Text>
+            <Text variant="bodyStrong" numberOfLines={1} style={{ maxWidth: 170 }}>{accName(accountId)}</Text>
+            <Icon name="chevron-right" size={15} color={c.inkFaint} />
+          </PressableScale>
+          {isTransfer ? (
+            <PressableScale onPress={() => setSheet('to')} scaleTo={0.99} style={[styles.formRow, line]} testID="to-account-chip" accessibilityRole="button" accessibilityLabel={t('add.toAccount')}>
+              <Icon name="transfer" size={17} color={c.inkSoft} />
+              <Text tone="soft" style={{ flex: 1 }}>{t('add.toAccount')}</Text>
+              <Text variant="bodyStrong" numberOfLines={1} style={{ maxWidth: 170 }}>{accName(toId)}</Text>
+              <Icon name="chevron-right" size={15} color={c.inkFaint} />
+            </PressableScale>
+          ) : null}
+          <View style={[styles.formRow, !isAdjust && line]}>
+            <Icon name="calendar" size={17} color={c.inkSoft} />
+            <Text tone="soft" style={{ flex: 1 }}>{t('add.date')}</Text>
+            <PressableScale onPress={() => shiftDate(-1)} hitSlop={8} accessibilityLabel={t('add.prevDay')} style={styles.dateBtn}><Icon name="chevron-left" size={16} color={c.inkSoft} /></PressableScale>
+            <Text variant="bodyStrong" style={{ minWidth: 64, textAlign: 'center' }} testID="date-label">{dayLabel(date, t, intl)}</Text>
+            <PressableScale onPress={() => shiftDate(1)} hitSlop={8} accessibilityLabel={t('add.nextDay')} style={styles.dateBtn}><Icon name="chevron-right" size={16} color={c.inkSoft} /></PressableScale>
           </View>
-        </View>
-
-        {!isAdjust ? <Field value={description} onChangeText={setDescription} placeholder={t('add.description')} maxLength={80} testID="tx-description" accessibilityLabel={t('add.description')} /> : null}
-
-        {more && !isAdjust ? (
-          <View style={{ gap: 12 }}>
-            <Field value={notes} onChangeText={setNotes} placeholder={t('add.notes')} multiline maxLength={500} style={{ height: 80, paddingTop: 14 }} />
-            {!isTransfer ? (
-              <View style={styles.switchRow}>
-                <Text style={{ flex: 1 }}>{t('add.recurring')}</Text>
-                <Switch value={recurring} onValueChange={setRecurring} trackColor={{ true: c.ink, false: c.surfaceAlt }} accessibilityLabel={t('add.recurring')} />
+          {!isAdjust ? (
+            <View style={[styles.formRow, more && line]}>
+              <Icon name="text" size={17} color={c.inkSoft} />
+              <TextInput value={description} onChangeText={setDescription} placeholder={t('add.description')} placeholderTextColor={c.inkFaint} maxLength={80}
+                testID="tx-description" accessibilityLabel={t('add.description')} selectionColor={c.accent} style={inputStyle} />
+              {!more ? (
+                <PressableScale onPress={() => setMore(true)} hitSlop={8} accessibilityRole="button"><Text variant="caption" style={{ color: c.accent, fontWeight: '700' }}>{t('add.more')}</Text></PressableScale>
+              ) : null}
+            </View>
+          ) : null}
+          {more && !isAdjust ? (
+            <>
+              <View style={[styles.formRow, !isTransfer && line]}>
+                <Icon name="edit" size={17} color={c.inkSoft} />
+                <TextInput value={notes} onChangeText={setNotes} placeholder={t('add.notes')} placeholderTextColor={c.inkFaint} maxLength={500} accessibilityLabel={t('add.notes')} selectionColor={c.accent} style={inputStyle} />
               </View>
-            ) : null}
-          </View>
-        ) : !isAdjust ? (
-          <PressableScale onPress={() => setMore(true)} style={{ alignSelf: 'flex-start', paddingVertical: 4 }} accessibilityRole="button"><Text variant="caption" tone="soft">{t('add.more')}</Text></PressableScale>
-        ) : null}
+              {!isTransfer ? (
+                <View style={styles.formRow}>
+                  <Icon name="recurring" size={17} color={c.inkSoft} />
+                  <Text tone="soft" style={{ flex: 1 }}>{t('add.recurring')}</Text>
+                  <Toggle value={recurring} onChange={setRecurring} label={t('add.recurring')} />
+                </View>
+              ) : null}
+            </>
+          ) : null}
+        </View>
         {error ? <Text variant="caption" accessibilityRole="alert" style={{ textAlign: 'center' }}>{error}</Text> : null}
       </ScrollView>
 
-      <View style={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 10, paddingTop: 8, gap: 10 }}>
-        <Numpad onKey={onKey} decimalSep={decimalSep} allowDecimal={exp > 0} />
+      <View style={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 10, paddingTop: 6, gap: 10 }}>
+        <Numpad onKey={onKey} decimalSep={decimalSep} allowDecimal={exp > 0} keyHeight={small ? 40 : 46} />
         <Button label={t(editing ? 'common.save' : (`add.save.${kind}` as TKey))} onPress={doSave} disabled={!canSave} testID="tx-save" />
       </View>
 
       <Sheet<string> visible={sheet === 'from'} title={t('add.account')} value={accountId} onClose={() => setSheet(null)} onSelect={(v) => { setAccountId(v); if (v === toAccountId) setToAccountId(null); }}
         options={accounts.map((a) => ({ value: a.id, label: a.name, hint: formatMoney(f.balances[a.id] ?? 0, a.currency, intl) }))} />
-      <Sheet<string> visible={sheet === 'to'} title={t('add.toAccount')} value={toAccountId ?? ''} onClose={() => setSheet(null)} onSelect={setToAccountId}
+      <Sheet<string> visible={sheet === 'to'} title={t('add.toAccount')} value={toId ?? ''} onClose={() => setSheet(null)} onSelect={setToAccountId}
         options={accounts.filter((a) => a.id !== accountId).map((a) => ({ value: a.id, label: a.name, hint: formatMoney(f.balances[a.id] ?? 0, a.currency, intl) }))} />
     </KeyboardAvoidingView>
   );
 }
 const styles = StyleSheet.create({
-  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  close: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  date: { flexDirection: 'row', alignItems: 'center', height: 38, borderRadius: 19, paddingHorizontal: 2 },
-  dateBtn: { width: 32, height: 38, alignItems: 'center', justifyContent: 'center' },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
+  form: { borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14 },
+  formRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 46 },
+  dateBtn: { width: 28, height: 32, alignItems: 'center', justifyContent: 'center' },
 });

@@ -57,7 +57,7 @@ function Gate() {
     // Error de conexión al cargar: reintento explícito, sin pantalla rota.
     return (
       <View style={{ flex: 1, backgroundColor: c.bg, justifyContent: 'center', padding: 24 }}>
-        <EmptyState expression="sleepy" title={t('error.loadTitle')} body={t('error.loadBody')} />
+        <EmptyState title={t('error.loadTitle')} body={t('error.loadBody')} />
         <View style={{ alignItems: 'center' }}><Button label={t('common.retry')} onPress={() => snap.refetch()} compact /></View>
       </View>
     );
@@ -80,6 +80,11 @@ function Gate() {
           <Stack.Screen name="movimiento/nuevo" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="movimiento/[id]" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="cuenta" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="grupo" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="comprar" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="asistente" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="cuentas" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="ajustes" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="categorias" options={{ animation: 'slide_from_right' }} />
         </Stack.Protected>
       </Stack>

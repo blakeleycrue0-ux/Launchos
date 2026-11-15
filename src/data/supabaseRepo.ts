@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Account, Category, Profile, Snapshot, Transaction } from '@/domain/types';
+import type { Account, Category, Group, Profile, Snapshot, Transaction } from '@/domain/types';
 import type { Repository } from './repository';
 
 const fail = (error: { message: string } | null) => {
@@ -10,13 +10,14 @@ const fail = (error: { message: string } | null) => {
 export function createSupabaseRepo(client: SupabaseClient, userId: string): Repository {
   return {
     async load(): Promise<Snapshot> {
-      const [p, a, c, t] = await Promise.all([
+      const [p, a, c, t, g] = await Promise.all([
         client.from('profiles').select('*').eq('id', userId).single(),
         client.from('accounts').select('*').order('created_at'),
         client.from('categories').select('*').order('created_at'),
         client.from('transactions').select('*').order('occurred_on', { ascending: false }).order('created_at', { ascending: false }),
+        client.from('groups').select('*').order('created_at'),
       ]);
-      fail(p.error); fail(a.error); fail(c.error); fail(t.error);
+      fail(p.error); fail(a.error); fail(c.error); fail(t.error); fail(g.error);
       const pr = p.data!;
       const profile: Profile = {
         id: pr.id,
@@ -39,7 +40,11 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): Repo
         accountId: r.account_id, toAccountId: r.to_account_id, categoryId: r.category_id,
         description: r.description ?? '', notes: r.notes ?? '', isRecurring: r.is_recurring, createdAt: r.created_at,
       }));
-      return { profile, accounts, categories, transactions };
+      const groups: Group[] = (g.data ?? []).map((r) => ({
+        id: r.id, name: r.name, kind: r.kind, photoPreset: r.photo_preset, photoUri: null, currency: r.currency,
+        budgetMinor: Number(r.budget_minor), createdAt: r.created_at,
+      }));
+      return { profile, accounts, categories, transactions, groups };
     },
 
     async updateProfile(patch) {
@@ -86,6 +91,20 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): Repo
           { onConflict: 'id' },
         )).error,
       );
+    },
+
+    async upsertGroup(g) {
+      // Las fotos subidas por el usuario necesitan Storage (fase de sincronización): aquí solo viaja la predeterminada.
+      fail(
+        (await client.from('groups').upsert(
+          { id: g.id, name: g.name, kind: g.kind, photo_preset: g.photoPreset, currency: g.currency, budget_minor: g.budgetMinor },
+          { onConflict: 'id' },
+        )).error,
+      );
+    },
+
+    async deleteGroup(id) {
+      fail((await client.from('groups').delete().eq('id', id)).error);
     },
 
     async deleteEverything() {

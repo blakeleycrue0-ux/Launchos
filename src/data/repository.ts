@@ -1,4 +1,4 @@
-import type { Account, Category, Profile, Snapshot, Transaction } from '@/domain/types';
+import type { Account, Category, Group, Profile, Snapshot, Transaction } from '@/domain/types';
 
 /**
  * Contrato de acceso a datos. Dos implementaciones:
@@ -13,6 +13,8 @@ export interface Repository {
   upsertTransaction(tx: Transaction): Promise<void>;
   deleteTransaction(id: string): Promise<void>;
   upsertCategory(category: Category): Promise<void>;
+  upsertGroup(group: Group): Promise<void>;
+  deleteGroup(id: string): Promise<void>;
   /** Borra todos los datos del usuario (y la cuenta, en modo Supabase). */
   deleteEverything(): Promise<void>;
 }

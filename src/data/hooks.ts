@@ -5,7 +5,7 @@ import { availableToSpend } from '@/domain/available';
 import { monthKey, todayISO } from '@/domain/dates';
 import { monthSummary } from '@/domain/summary';
 import { upsertById } from '@/domain/validation';
-import type { Account, Category, Profile, Snapshot, Transaction } from '@/domain/types';
+import type { Account, Category, Group, Profile, Snapshot, Transaction } from '@/domain/types';
 import { currentUserId, useAuth } from '@/lib/auth';
 import { isSupabaseConfigured } from '@/lib/config';
 import { supabase } from '@/lib/supabase';
@@ -65,6 +65,10 @@ export const useSaveAccount = () =>
   useOptimistic<Account>((repo, a) => repo.upsertAccount(a), (s, a) => ({ ...s, accounts: upsertById(s.accounts, a) }));
 export const useSaveCategory = () =>
   useOptimistic<Category>((repo, c) => repo.upsertCategory(c), (s, c) => ({ ...s, categories: upsertById(s.categories, c) }));
+export const useSaveGroup = () =>
+  useOptimistic<Group>((repo, g) => repo.upsertGroup(g), (s, g) => ({ ...s, groups: upsertById(s.groups, g) }));
+export const useDeleteGroup = () =>
+  useOptimistic<string>((repo, id) => repo.deleteGroup(id), (s, id) => ({ ...s, groups: s.groups.filter((g) => g.id !== id) }));
 export const useUpdateProfile = () =>
   useOptimistic<Partial<Omit<Profile, 'id'>>>((repo, p) => repo.updateProfile(p), (s, p) => ({ ...s, profile: { ...s.profile, ...p } }));
 

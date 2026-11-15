@@ -42,6 +42,18 @@ export function minorToNumber(minor: Minor, currency: string): number {
   return minor / 10 ** currencyExponent(currency);
 }
 
+const SYMBOL: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', MXN: 'MX$', CHF: 'CHF', CAD: 'CA$', JPY: '¥' };
+const isEnglish = (locale: string) => locale.toLowerCase().startsWith('en');
+
+/** Símbolo de la moneda ("€", "$"). */
+export function currencySymbol(currency: string, _locale = 'es-ES'): string {
+  return SYMBOL[currency] ?? currency;
+}
+
+/**
+ * Formato propio y determinista (no depende de Intl, que varía entre motores):
+ *  es → "1.087,50 €"   en → "€1,087.50"
+ */
 export function formatMoney(
   minor: Minor,
   currency: string,
@@ -49,15 +61,16 @@ export function formatMoney(
   opts: { sign?: boolean; compact?: boolean } = {},
 ): string {
   const exp = currencyExponent(currency);
-  const value = minor / 10 ** exp;
-  const fmt = new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: opts.compact && Number.isInteger(value) ? 0 : exp,
-    maximumFractionDigits: exp,
-    signDisplay: opts.sign ? 'exceptZero' : 'auto',
-  });
-  return fmt.format(value);
+  const en = isEnglish(locale);
+  const abs = Math.abs(minor);
+  const unit = 10 ** exp;
+  const intPart = String(Math.floor(abs / unit)).replace(/\B(?=(\d{3})+(?!\d))/g, en ? ',' : '.');
+  const fracNum = abs % unit;
+  const showFrac = exp > 0 && !(opts.compact && fracNum === 0);
+  const num = showFrac ? `${intPart}${en ? '.' : ','}${String(fracNum).padStart(exp, '0')}` : intPart;
+  const sym = currencySymbol(currency);
+  const sign = minor < 0 ? '-' : opts.sign && minor > 0 ? '+' : '';
+  return en ? `${sign}${sym}${num}` : `${sign}${num}\u00A0${sym}`;
 }
 
 /** Texto numérico editable: "1250" → "12,50" usando el separador del idioma. */
@@ -92,8 +105,3 @@ export function allocate(total: Minor, weights: number[]): Minor[] {
 
 export const splitEqually = (total: Minor, parts: number): Minor[] => allocate(total, Array(parts).fill(1));
 
-/** Símbolo de la moneda en el idioma dado ("€", "$"). */
-export function currencySymbol(currency: string, locale = 'es-ES'): string {
-  const part = new Intl.NumberFormat(locale, { style: 'currency', currency }).formatToParts(0).find((p) => p.type === 'currency');
-  return part?.value ?? currency;
-}

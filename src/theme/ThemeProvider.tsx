@@ -3,12 +3,12 @@ import { useColorScheme } from 'react-native';
 import { useSettings } from '@/lib/settings';
 import { dark, light, type Colors } from './tokens';
 
-const Ctx = createContext<Colors>(light);
+const Ctx = createContext<Colors>(dark);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const system = useColorScheme();
   const pref = useSettings((s) => s.theme);
-  const colors = useMemo(() => ((pref === 'system' ? system : pref) === 'dark' ? dark : light), [pref, system]);
+  const colors = useMemo<Colors>(() => ((pref === 'system' ? system ?? 'dark' : pref) === 'light' ? light : dark), [pref, system]);
   return <Ctx.Provider value={colors}>{children}</Ctx.Provider>;
 }
 export const useTheme = () => useContext(Ctx);

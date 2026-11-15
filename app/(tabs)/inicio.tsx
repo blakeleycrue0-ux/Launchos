@@ -1,148 +1,160 @@
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { TxRow } from '@/features/TxRow';
 import { monthLabel } from '@/features/labels';
 import { useFinance } from '@/data/hooks';
 import { formatMoney } from '@/domain/money';
-import { useT } from '@/i18n';
+import { useT, type TKey } from '@/i18n';
 import { useSettings } from '@/lib/settings';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radii } from '@/theme/tokens';
 import { Card } from '@/ui/Card';
 import { EmptyState } from '@/ui/EmptyState';
+import { IconButton } from '@/ui/Header';
 import { Icon } from '@/ui/Icon';
-import { Mascot } from '@/ui/Mascot';
+import { MetalCard, onMetal } from '@/ui/MetalCard';
+import { MioMascot } from '@/ui/MioMascot';
 import { PressableScale } from '@/ui/PressableScale';
 import { Screen } from '@/ui/Screen';
+import { BottomSheet } from '@/ui/Sheet';
 import { Text } from '@/ui/Text';
 import { TAB_BAR_HEIGHT } from './_layout';
+
+const ACTIONS = [
+  { key: 'add', icon: 'plus', label: 'home.qAdd', href: '/movimiento/nuevo' },
+  { key: 'buy', icon: 'bag', label: 'home.qBuy', href: '/comprar' },
+  { key: 'groups', icon: 'groups', label: 'home.qGroups', href: '/grupos' },
+  { key: 'ai', icon: null, label: 'home.qAi', href: '/asistente' },
+] as const;
 
 export default function Home() {
   const f = useFinance();
   const { t, intl } = useT();
   const c = useTheme();
   const dash = useSettings((s) => s.dashboard);
+  const [explain, setExplain] = useState(false);
   if (!f) return null;
   const cur = f.profile.currency;
   const money = (v: number, o?: { sign?: boolean }) => formatMoney(v, cur, intl, o);
-  const { available, totalMoney } = f.availability;
+  const { available, totalMoney, spendable, reserved } = f.availability;
   const recent = f.transactions.slice().sort((a, b) => b.occurredOn.localeCompare(a.occurredOn) || b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
   const m = f.thisMonth;
-  const maxBar = Math.max(m.income, m.spending, 1);
   const hour = new Date().getHours();
   const greet = hour < 6 ? t('home.night') : hour < 13 ? t('home.morning') : hour < 21 ? t('home.afternoon') : t('home.night');
+  const monthName = monthLabel(f.month, intl).split(' ')[0];
 
   return (
-    <Screen bottomExtra={TAB_BAR_HEIGHT + 24} contentStyle={{ gap: 22 }}>
+    <Screen bottomExtra={TAB_BAR_HEIGHT + 20} contentStyle={{ gap: 16 }}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text variant="caption" tone="soft">{greet}{f.profile.displayName ? `, ${f.profile.displayName}` : ''}</Text>
+          <Text variant="headline" style={{ fontSize: 22, lineHeight: 26, letterSpacing: -0.8, fontWeight: '800' }}>
+            mio<Text variant="headline" style={{ fontSize: 22, color: c.accent }}>.</Text>
+          </Text>
+          <Text variant="caption" tone="soft" numberOfLines={1}>{greet}{f.profile.displayName ? `, ${f.profile.displayName}` : ''}</Text>
         </View>
-        <Mascot size={52} animated={false} glow={false} />
+        <IconButton icon="settings" label={t('set.title')} onPress={() => router.push('/ajustes')} testID="open-settings" />
+        <PressableScale onPress={() => router.push('/asistente')} accessibilityRole="button" accessibilityLabel={t('home.qAi')} testID="open-assistant" scaleTo={0.92}>
+          <MioMascot size={40} plate />
+        </PressableScale>
       </View>
 
-      <Animated.View entering={FadeIn.duration(500)} style={{ gap: 6 }} accessibilityRole="summary">
-        <Text variant="micro" tone="soft" upper>{t('home.available')}</Text>
-        <Text variant="display" testID="available-amount" adjustsFontSizeToFit numberOfLines={1} accessibilityLabel={`${t('home.available')} ${money(available)}`}>
-          {money(available, { sign: false })}
-        </Text>
-        <Text tone="soft" style={{ maxWidth: 320 }}>{available < 0 ? t('home.negative') : t('home.availableHint')}</Text>
-      </Animated.View>
+      <MetalCard>
+        <View style={{ padding: 18, gap: 4 }} accessibilityRole="summary">
+          <View style={styles.rowBetween}>
+            <Text variant="micro" upper style={{ color: onMetal.soft }}>{t('home.available')}</Text>
+            <PressableScale onPress={() => setExplain(true)} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('home.how')} testID="explain-available">
+              <Icon name="info" size={16} color={onMetal.soft} />
+            </PressableScale>
+          </View>
+          <Text variant="display" testID="available-amount" adjustsFontSizeToFit numberOfLines={1} style={{ color: onMetal.ink }}
+            accessibilityLabel={`${t('home.available')} ${money(available)}`}>
+            {money(available)}
+          </Text>
+          {available < 0 ? <Text variant="caption" style={{ color: onMetal.soft }}>{t('home.negative')}</Text> : null}
+        </View>
+        <PressableScale onPress={() => router.push('/cuentas')} scaleTo={0.99} accessibilityRole="button" testID="open-accounts"
+          style={[styles.cardFoot, { borderTopColor: onMetal.line }]}>
+          <Icon name="wallet" size={15} color={onMetal.soft} />
+          <Text variant="caption" style={{ color: onMetal.soft, flex: 1 }}>{t('home.inAccounts')}</Text>
+          <Text variant="bodyStrong" style={{ color: onMetal.ink, fontSize: 13.5 }}>{money(totalMoney)}</Text>
+          <Icon name="chevron-right" size={15} color={onMetal.soft} />
+        </PressableScale>
+      </MetalCard>
 
       <View style={styles.actions}>
-        {([
-          ['arrow-up-right', 'home.expense', 'expense'],
-          ['arrow-down-left', 'home.income', 'income'],
-          ['swap', 'home.transfer', 'transfer'],
-        ] as const).map(([icon, label, kind]) => (
-          <PressableScale key={kind} testID={`quick-${kind}`} accessibilityRole="button" accessibilityLabel={t(label)}
-            onPress={() => router.push({ pathname: '/movimiento/nuevo', params: { kind } })}
-            style={[styles.action, { backgroundColor: c.surface, borderColor: c.line }]}>
-            <View style={[styles.actionIcon, { backgroundColor: c.ink }]}><Icon name={icon} size={18} color={c.inverse} stroke={2.2} /></View>
-            <Text variant="caption" style={{ fontWeight: '700' }}>{t(label)}</Text>
+        {ACTIONS.map((a) => (
+          <PressableScale key={a.key} testID={`quick-${a.key}`} accessibilityRole="button" accessibilityLabel={t(a.label as TKey)} scaleTo={0.94}
+            onPress={() => router.push(a.href)} style={styles.action}>
+            <View style={[styles.actionIcon, { backgroundColor: c.surface, borderColor: c.line }]}>
+              {a.icon ? <Icon name={a.icon} size={19} color={c.ink} /> : <MioMascot size={30} plate={false} />}
+            </View>
+            <Text variant="caption" align="center" numberOfLines={2} style={{ fontSize: 11.5, lineHeight: 15, color: c.inkSoft }}>{t(a.label as TKey)}</Text>
           </PressableScale>
         ))}
       </View>
 
-      {f.transactions.length === 0 ? (
-        <Card>
-          <EmptyState title={t('home.emptyTitle')} body={t('home.emptyBody')} action={t('home.emptyCta')} onAction={() => router.push('/movimiento/nuevo')} />
-        </Card>
-      ) : null}
-
-      {dash.accounts ? (
-        <Animated.View entering={FadeInDown.delay(80).duration(450)}>
-          <Card style={{ gap: 14 }}>
-            <View style={styles.rowBetween}>
-              <Text variant="micro" tone="soft" upper>{t('home.inAccounts')}</Text>
-              <PressableScale onPress={() => router.push('/cuentas')} accessibilityRole="link"><Icon name="chevron-right" size={20} color={c.inkFaint} /></PressableScale>
-            </View>
-            <Text variant="title">{money(totalMoney)}</Text>
-            {f.activeAccounts.length ? (
-              <View style={{ gap: 10 }}>
-                {f.activeAccounts.slice(0, 4).map((a) => (
-                  <View key={a.id} style={styles.rowBetween}>
-                    <Text tone="soft" numberOfLines={1} style={{ flex: 1 }}>{a.name}</Text>
-                    <Text variant="bodyStrong">{money(f.balances[a.id] ?? 0)}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-          </Card>
-        </Animated.View>
-      ) : null}
-
       {dash.month ? (
-        <Animated.View entering={FadeInDown.delay(140).duration(450)}>
-          <Card style={{ gap: 16 }}>
-            <View style={styles.rowBetween}>
-              <Text variant="headline">{t('home.thisMonth')}</Text>
-              <Text variant="caption" tone="soft">{monthLabel(f.month, intl)}</Text>
-            </View>
-            {([['home.incomeLabel', m.income, c.ink], ['home.spendingLabel', m.spending, c.inkFaint]] as const).map(([k, v, col]) => (
-              <View key={k} style={{ gap: 8 }}>
-                <View style={styles.rowBetween}>
-                  <Text tone="soft">{t(k)}</Text>
-                  <Text variant="bodyStrong">{money(v)}</Text>
-                </View>
-                <View style={[styles.track, { backgroundColor: c.surfaceAlt }]}>
-                  <View style={[styles.fill, { backgroundColor: col, width: `${Math.max(v > 0 ? 3 : 0, (Math.max(v, 0) / maxBar) * 100)}%` }]} />
-                </View>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          {([['expense', 'home.spendingMonth', m.spending], ['income', 'home.incomeMonth', m.income]] as const).map(([icon, label, v]) => (
+            <Card key={label} style={{ flex: 1, padding: 14, gap: 2 }}>
+              <View style={styles.rowBetween}>
+                <Text variant="caption" tone="soft">{t(label)}</Text>
+                <Icon name={icon} size={15} color={c.inkFaint} />
               </View>
+              <Text variant="headline" adjustsFontSizeToFit numberOfLines={1}>{money(v)}</Text>
+              <Text variant="caption" tone="faint" style={{ textTransform: 'capitalize' }}>{monthName}</Text>
+            </Card>
+          ))}
+        </View>
+      ) : null}
+
+      {f.transactions.length === 0 ? (
+        <Card><EmptyState title={t('home.emptyTitle')} body={t('home.emptyBody')} action={t('home.emptyCta')} onAction={() => router.push('/movimiento/nuevo')} /></Card>
+      ) : dash.recent ? (
+        <Animated.View entering={FadeInDown.duration(250)}>
+          <View style={[styles.rowBetween, { marginBottom: 6, paddingHorizontal: 2 }]}>
+            <Text variant="headline">{t('home.recent')}</Text>
+            <PressableScale onPress={() => router.push('/movimientos')} hitSlop={8} accessibilityRole="link"><Text variant="caption" style={{ color: c.accent, fontWeight: '700' }}>{t('home.seeAll')}</Text></PressableScale>
+          </View>
+          <Card style={{ paddingVertical: 2, paddingHorizontal: 14 }}>
+            {recent.map((tx, i) => (
+              <TxRow key={tx.id} tx={tx} accounts={f.accounts} categories={f.categories} currency={cur} showDate hideAccount last={i === recent.length - 1} onPress={() => router.push(`/movimiento/${tx.id}`)} />
             ))}
-            <View style={[styles.rowBetween, { paddingTop: 4, borderTopWidth: StyleSheet.hairlineWidth * 2, borderTopColor: c.line }]}>
-              <Text tone="soft">{t('home.balanceMonth')}</Text>
-              <Text variant="bodyStrong">{money(m.net, { sign: true })}</Text>
-            </View>
           </Card>
         </Animated.View>
       ) : null}
 
-      {dash.recent && recent.length ? (
-        <Animated.View entering={FadeInDown.delay(200).duration(450)}>
-          <Card style={{ paddingVertical: 12 }}>
-            <View style={[styles.rowBetween, { marginBottom: 4 }]}>
-              <Text variant="headline">{t('home.recent')}</Text>
-              <PressableScale onPress={() => router.push('/movimientos')} accessibilityRole="link"><Text variant="caption" tone="soft">{t('home.seeAll')}</Text></PressableScale>
+      <BottomSheet visible={explain} title={t('home.how')} onClose={() => setExplain(false)}>
+        <View style={{ gap: 10 }}>
+          {([
+            ['home.howSpendable', spendable, ''],
+            ['home.howPayments', reserved.payments, '−'],
+            ['home.howDebts', reserved.debts, '−'],
+            ['home.howSavings', reserved.savings, '−'],
+          ] as const).map(([k, v, sign]) => (
+            <View key={k} style={styles.rowBetween}>
+              <Text tone="soft" style={{ flex: 1 }}>{t(k)}</Text>
+              <Text variant="bodyStrong">{sign ? `${sign} ` : ''}{money(v)}</Text>
             </View>
-            {recent.map((tx) => (
-              <TxRow key={tx.id} tx={tx} accounts={f.accounts} categories={f.categories} currency={cur} onPress={() => router.push(`/movimiento/${tx.id}`)} />
-            ))}
-          </Card>
-        </Animated.View>
-      ) : null}
+          ))}
+          <View style={[styles.rowBetween, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line, paddingTop: 10 }]}>
+            <Text variant="bodyStrong">{t('home.available')}</Text>
+            <Text variant="headline" style={{ color: c.accent }}>{money(available)}</Text>
+          </View>
+          <Text variant="caption" tone="soft">{t('home.howNote')}</Text>
+        </View>
+      </BottomSheet>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 52 },
-  actions: { flexDirection: 'row', gap: 10 },
-  action: { flex: 1, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth * 2, paddingVertical: 14, alignItems: 'center', gap: 8 },
-  actionIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  track: { height: 8, borderRadius: 4, overflow: 'hidden' },
-  fill: { height: 8, borderRadius: 4 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  cardFoot: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, height: 44, borderTopWidth: StyleSheet.hairlineWidth },
+  actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  action: { flex: 1, alignItems: 'center', gap: 6 },
+  actionIcon: { width: 52, height: 52, borderRadius: radii.lg - 2, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth },
 });

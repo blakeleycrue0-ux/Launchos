@@ -77,12 +77,44 @@ await asUser(A, async () => {
   await throws('no se puede cambiar user_id', () => db.query(`update transactions set user_id=$1 where id=$2`, [B, T1]), /row-level security|immutable/i);
 });
 
+// ── Grupos ──
+const G1 = '00000000-0000-4000-8000-0000000000a1';
+await asUser(A, async () => {
+  await db.query(`insert into groups(id,name,kind,currency,budget_minor) values ($1,'Ibiza 2027','travel','EUR',120000)`, [G1]);
+  ok('A crea un grupo y queda como propietario', (await q(`select role from group_members where group_id=$1`, [G1]))[0]?.role === 'owner');
+  await db.query(`insert into groups(id,name,kind,currency) values ($1,'Ibiza 2027','travel','EUR') on conflict (id) do update set name=excluded.name`, [G1]);
+  ok('reintento de crear grupo no duplica', (await q(`select count(*)::int c from groups`))[0].c === 1);
+  await throws('presupuesto negativo rechazado', () => db.query(`update groups set budget_minor=-1 where id=$1`, [G1]), /check/i);
+});
+await asUser(B, async () => {
+  ok('B (no miembro) no ve el grupo', (await q(`select * from groups`)).length === 0);
+  ok('B no ve los miembros', (await q(`select * from group_members`)).length === 0);
+  ok('B no puede editar el grupo (0 filas)', (await db.query(`update groups set name='hack' where id=$1`, [G1])).affectedRows === 0);
+  ok('B no puede borrar el grupo (0 filas)', (await db.query(`delete from groups where id=$1`, [G1])).affectedRows === 0);
+  await throws('B no puede añadirse como miembro', () => db.query(`insert into group_members(group_id,user_id) values ($1,$2)`, [G1, B]), /permission denied|row-level/i);
+  await throws('B no puede crear un grupo a nombre de A', () => db.query(`insert into groups(id,owner_id,name,currency) values (gen_random_uuid(),$1,'x','EUR')`, [A]), /row-level/i);
+});
+await db.query(`insert into group_members(group_id,user_id) values ($1,$2)`, [G1, B]); // alta por backend (futura RPC de invitación)
+await asUser(B, async () => {
+  ok('B, ya miembro, ve el grupo', (await q(`select * from groups`)).length === 1);
+  ok('B ve a los 2 miembros', (await q(`select * from group_members`)).length === 2);
+  ok('B, miembro, no puede editar (solo el propietario)', (await db.query(`update groups set name='hack' where id=$1`, [G1])).affectedRows === 0);
+  await throws('B no puede ascenderse a propietario', () => db.query(`update group_members set role='owner' where user_id=$1`, [B]), /permission denied/i);
+  ok('B puede abandonar el grupo', (await db.query(`delete from group_members where user_id=$1`, [B])).affectedRows === 1);
+  ok('…y deja de verlo', (await q(`select * from groups`)).length === 0);
+});
+await asUser(A, async () => {
+  ok('el propietario no puede abandonar su grupo (0 filas)', (await db.query(`delete from group_members where user_id=$1`, [A])).affectedRows === 0);
+  await throws('owner_id inmutable', () => db.query(`update groups set owner_id=$1 where id=$2`, [B, G1]), /immutable|row-level/i);
+});
+
 await db.exec('reset role');
 await throws('anon no puede leer', async () => { await db.exec(`set role anon`); try { await db.query('select * from transactions'); } finally { await db.exec('reset role'); } }, /permission denied/i);
 
 await asUser(A, async () => { await db.query(`select delete_my_account()`); });
 ok('borrar cuenta elimina usuario, cuentas y movimientos',
   (await q(`select (select count(*) from auth.users where id=$1)+(select count(*) from accounts where user_id=$1)+(select count(*) from transactions where user_id=$1)+(select count(*) from profiles where id=$1) n`, [A]))[0].n == 0);
+ok('borrar cuenta elimina también sus grupos', (await q(`select count(*)::int c from groups`))[0].c === 0);
 ok('…y no toca a B', (await q(`select count(*)::int c from accounts where user_id=$1`, [B]))[0].c === 1);
 await throws('delete_my_account sin sesión falla', async () => { await db.exec(`set role authenticated`); try { await db.query('select delete_my_account()'); } finally { await db.exec('reset role'); } }, /not authenticated/);
 

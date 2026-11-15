@@ -32,7 +32,7 @@ export function Button({ label, onPress, variant = 'primary', icon, loading, dis
       onPress={onPress}
       style={[
         styles.base,
-        { backgroundColor: bg, height: compact ? 44 : 56, opacity: off && !loading ? 0.4 : 1, paddingHorizontal: compact ? 18 : 24 },
+        { backgroundColor: bg, height: compact ? 40 : 50, opacity: off && !loading ? 0.4 : 1, paddingHorizontal: compact ? 16 : 22 },
         variant === 'danger' && { borderWidth: StyleSheet.hairlineWidth * 2, borderColor: c.line },
       ]}
     >
@@ -40,7 +40,7 @@ export function Button({ label, onPress, variant = 'primary', icon, loading, dis
         <ActivityIndicator color={fg} />
       ) : (
         <View style={styles.row}>
-          {icon ? <Icon name={icon} size={20} color={fg} /> : null}
+          {icon ? <Icon name={icon} size={18} color={fg} /> : null}
           <Text variant="bodyStrong" style={{ color: fg }}>{label}</Text>
         </View>
       )}
