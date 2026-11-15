@@ -55,7 +55,8 @@ describe('localRepo', () => {
   });
   it('lee datos guardados antes de existir los grupos', async () => {
     await AsyncStorage.setItem('mio.local.v1', JSON.stringify({ profile: { id: 'local' }, accounts: [], categories: [], transactions: [] }));
-    expect((await createLocalRepo().load()).groups).toEqual([]);
+    const old = await createLocalRepo().load();
+    expect([old.groups, old.payments, old.goals]).toEqual([[], [], []]);
   });
   it('borrar todo devuelve un espacio nuevo', async () => {
     const repo = createLocalRepo();

@@ -38,6 +38,8 @@ export interface Transaction {
   description: string;
   notes: string;
   isRecurring: boolean;
+  /** Pago recurrente que originó este movimiento (evita registrarlo dos veces). */
+  recurringPaymentId?: string | null;
   createdAt: string;
 }
 
@@ -67,10 +69,41 @@ export interface Group {
   createdAt: string;
 }
 
+export type Frequency = 'weekly' | 'monthly' | 'yearly';
+
+export interface RecurringPayment {
+  id: string;
+  name: string;
+  amountMinor: Minor;
+  frequency: Frequency;
+  /** Próximo vencimiento pendiente. */
+  nextDue: ISODate;
+  /** Día del mes original (1–31): evita que un pago del 31 se quede para siempre en el 28. */
+  anchorDay: number;
+  accountId: string;
+  categoryId: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface GoalContribution { id: string; amountMinor: Minor; on: ISODate }
+
+export interface Goal {
+  id: string;
+  name: string;
+  targetMinor: Minor;
+  dueDate: ISODate | null;
+  /** Aportaciones (positivas) y retiradas (negativas). Lo reservado es su suma. */
+  contributions: GoalContribution[];
+  createdAt: string;
+}
+
 export interface Snapshot {
   profile: Profile;
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];
   groups: Group[];
+  payments: RecurringPayment[];
+  goals: Goal[];
 }

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { TxRow } from '@/features/TxRow';
+import { dueLabel } from '@/features/dueLabel';
 import { monthLabel } from '@/features/labels';
 import { useFinance } from '@/data/hooks';
 import { formatMoney } from '@/domain/money';
@@ -110,6 +111,26 @@ export default function Home() {
         </View>
       ) : null}
 
+      <Card style={{ paddingVertical: 2, paddingHorizontal: 14 }}>
+        {([
+          { key: 'payments', icon: 'subscriptions', href: '/pagos', title: t('home.payments'), amount: reserved.payments,
+            sub: f.upcomingPayments[0] ? `${f.upcomingPayments[0].name} · ${dueLabel(f.upcomingPayments[0].due, f.today, t, intl)}` : t('home.paymentsEmpty') },
+          { key: 'goals', icon: 'target', href: '/objetivos', title: t('home.goals'), amount: reserved.savings,
+            sub: f.goals.length ? t('home.goalsCount', { n: f.goals.length }) : t('home.goalsEmpty') },
+        ] as const).map((r, i) => (
+          <PressableScale key={r.key} onPress={() => router.push(r.href)} scaleTo={0.985} testID={`home-${r.key}`} accessibilityRole="button" accessibilityLabel={r.title}
+            style={[styles.planRow, i === 0 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.line }]}>
+            <View style={[styles.planIcon, { backgroundColor: c.surfaceAlt }]}><Icon name={r.icon} size={17} color={c.ink} /></View>
+            <View style={{ flex: 1 }}>
+              <Text variant="bodyStrong">{r.title}</Text>
+              <Text variant="caption" tone="soft" numberOfLines={1}>{r.sub}</Text>
+            </View>
+            {r.amount > 0 ? <Text variant="bodyStrong">{money(r.amount)}</Text> : null}
+            <Icon name="chevron-right" size={15} color={c.inkFaint} />
+          </PressableScale>
+        ))}
+      </Card>
+
       {f.transactions.length === 0 ? (
         <Card><EmptyState title={t('home.emptyTitle')} body={t('home.emptyBody')} action={t('home.emptyCta')} onAction={() => router.push('/movimiento/nuevo')} /></Card>
       ) : dash.recent ? (
@@ -156,5 +177,7 @@ const styles = StyleSheet.create({
   cardFoot: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, height: 44, borderTopWidth: StyleSheet.hairlineWidth },
   actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   action: { flex: 1, alignItems: 'center', gap: 6 },
+  planRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingVertical: 8 },
+  planIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   actionIcon: { width: 52, height: 52, borderRadius: radii.lg - 2, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth },
 });

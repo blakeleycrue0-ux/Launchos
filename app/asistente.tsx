@@ -5,6 +5,7 @@ import { categoryLabel } from '@/features/labels';
 import { useFinance } from '@/data/hooks';
 import { answerQuestion, type AssistantAnswer } from '@/domain/assistant';
 import { formatMoney } from '@/domain/money';
+import { upcoming } from '@/domain/recurring';
 import { useT, type TKey } from '@/i18n';
 import { useTheme } from '@/theme/ThemeProvider';
 import { fonts, radii } from '@/theme/tokens';
@@ -17,7 +18,7 @@ import { PressableScale } from '@/ui/PressableScale';
 import { Text } from '@/ui/Text';
 
 interface Msg { id: number; from: 'me' | 'mio'; text: string }
-const SUGGESTIONS: TKey[] = ['ai.sSpent', 'ai.sTop', 'ai.sAvailable', 'ai.sBuy'];
+const SUGGESTIONS: TKey[] = ['ai.sSpent', 'ai.sTop', 'ai.sWeek', 'ai.sReserved', 'ai.sBuy'];
 
 /**
  * Asistente en modo básico: respuestas CALCULADAS con funciones deterministas sobre los datos del usuario.
@@ -42,6 +43,8 @@ export default function Assistant() {
       case 'available': return t('ai.aAvailable', { amount: money(a.amount) });
       case 'total': return t('ai.aTotal', { amount: money(a.amount) });
       case 'noSpending': return t('ai.aNoSpending');
+      case 'reserved': return t('ai.aReserved', { payments: money(a.payments), savings: money(a.savings) });
+      case 'weekPayments': return a.count ? t('ai.aWeek', { n: a.count, total: money(a.total) }) : t('ai.aWeekNone');
       case 'topCategory': {
         const cat = f.categories.find((x) => x.id === a.categoryId);
         return t('ai.aTop', { category: cat ? categoryLabel(cat, t) : t('ai.uncategorized'), amount: money(a.amount) });
@@ -53,7 +56,8 @@ export default function Assistant() {
   const ask = (q: string) => {
     const question = q.trim();
     if (!question) return;
-    const answer = render(answerQuestion(question, { available: f.availability.available, totalMoney: f.availability.totalMoney, month: f.thisMonth, currency: cur }));
+    const answer = render(answerQuestion(question, { available: f.availability.available, totalMoney: f.availability.totalMoney, month: f.thisMonth, currency: cur, reserved: f.availability.reserved,
+      weekPayments: (() => { const w = upcoming(f.payments, f.today, 7); return { count: w.length, total: w.reduce((s, o) => s + o.amountMinor, 0) }; })() }));
     setMsgs((m) => [...m, { id: m.length, from: 'me', text: question }, { id: m.length + 1, from: 'mio', text: answer }]);
     setText('');
     setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 50);

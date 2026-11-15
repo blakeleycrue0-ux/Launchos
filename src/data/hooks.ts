@@ -5,7 +5,9 @@ import { availableToSpend } from '@/domain/available';
 import { monthKey, todayISO } from '@/domain/dates';
 import { monthSummary } from '@/domain/summary';
 import { upsertById } from '@/domain/validation';
-import type { Account, Category, Group, Profile, Snapshot, Transaction } from '@/domain/types';
+import type { Account, Category, Goal, Group, Profile, RecurringPayment, Snapshot, Transaction } from '@/domain/types';
+import { protectedSavings } from '@/domain/goals';
+import { reservedForPayments, upcoming } from '@/domain/recurring';
 import { currentUserId, useAuth } from '@/lib/auth';
 import { isSupabaseConfigured } from '@/lib/config';
 import { supabase } from '@/lib/supabase';
@@ -69,6 +71,14 @@ export const useSaveGroup = () =>
   useOptimistic<Group>((repo, g) => repo.upsertGroup(g), (s, g) => ({ ...s, groups: upsertById(s.groups, g) }));
 export const useDeleteGroup = () =>
   useOptimistic<string>((repo, id) => repo.deleteGroup(id), (s, id) => ({ ...s, groups: s.groups.filter((g) => g.id !== id) }));
+export const useSavePayment = () =>
+  useOptimistic<RecurringPayment>((repo, p) => repo.upsertPayment(p), (s, p) => ({ ...s, payments: upsertById(s.payments, p) }));
+export const useDeletePayment = () =>
+  useOptimistic<string>((repo, id) => repo.deletePayment(id), (s, id) => ({ ...s, payments: s.payments.filter((p) => p.id !== id) }));
+export const useSaveGoal = () =>
+  useOptimistic<Goal>((repo, g) => repo.upsertGoal(g), (s, g) => ({ ...s, goals: upsertById(s.goals, g) }));
+export const useDeleteGoal = () =>
+  useOptimistic<string>((repo, id) => repo.deleteGoal(id), (s, id) => ({ ...s, goals: s.goals.filter((g) => g.id !== id) }));
 export const useUpdateProfile = () =>
   useOptimistic<Partial<Omit<Profile, 'id'>>>((repo, p) => repo.updateProfile(p), (s, p) => ({ ...s, profile: { ...s.profile, ...p } }));
 
@@ -86,14 +96,21 @@ export function useFinance() {
     if (!data) return null;
     const accounts = data.accounts.filter((a) => !a.archived);
     const balances = accountBalances(data.accounts, data.transactions);
-    const availability = availableToSpend({ accounts: data.accounts, balances });
-    const month = monthKey(todayISO());
+    const today = todayISO();
+    const availability = availableToSpend({
+      accounts: data.accounts, balances,
+      reservedPaymentsMinor: reservedForPayments(data.payments, today),
+      protectedSavingsMinor: protectedSavings(data.goals),
+    });
+    const month = monthKey(today);
     return {
       ...data,
       activeAccounts: accounts,
       categories: data.categories.filter((c) => !c.archived),
       balances,
       availability,
+      today,
+      upcomingPayments: upcoming(data.payments, today),
       month,
       thisMonth: monthSummary(data.transactions, month),
     };

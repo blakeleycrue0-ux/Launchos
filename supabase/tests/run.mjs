@@ -77,6 +77,27 @@ await asUser(A, async () => {
   await throws('no se puede cambiar user_id', () => db.query(`update transactions set user_id=$1 where id=$2`, [B, T1]), /row-level security|immutable/i);
 });
 
+// ── Pagos recurrentes y objetivos ──
+const P1 = '00000000-0000-4000-8000-0000000000b1';
+await asUser(A, async () => {
+  await db.query(`insert into recurring_payments(id,name,amount_minor,frequency,next_due,anchor_day,account_id) values ($1,'Netflix',1299,'monthly','2026-11-20',20,$2)`, [P1, a1]);
+  await db.query(`insert into transactions(id,kind,amount_minor,occurred_on,account_id,recurring_payment_id) values (gen_random_uuid(),'expense',1299,'2026-11-20',$1,$2)`, [a1, P1]);
+  await throws('el mismo vencimiento no se registra dos veces', () => db.query(`insert into transactions(id,kind,amount_minor,occurred_on,account_id,recurring_payment_id) values (gen_random_uuid(),'expense',1299,'2026-11-20',$1,$2)`, [a1, P1]), /unique|duplicate/i);
+  ok('el siguiente vencimiento sí se registra', (await db.query(`insert into transactions(id,kind,amount_minor,occurred_on,account_id,recurring_payment_id) values (gen_random_uuid(),'expense',1299,'2026-12-20',$1,$2)`, [a1, P1])).affectedRows === 1);
+  await throws('pago recurrente con importe 0 rechazado', () => db.query(`insert into recurring_payments(id,name,amount_minor,frequency,next_due,anchor_day,account_id) values (gen_random_uuid(),'x',0,'monthly','2026-11-20',20,$1)`, [a1]), /check/i);
+  await db.query(`insert into goals(id,name,target_minor,contributions) values (gen_random_uuid(),'Portátil',120000,'[{"id":"c1","amountMinor":5000,"on":"2026-11-01"}]')`);
+  await throws('objetivo sin importe rechazado', () => db.query(`insert into goals(id,name,target_minor) values (gen_random_uuid(),'x',0)`), /check/i);
+});
+await asUser(B, async () => {
+  ok('B no ve los pagos de A', (await q(`select * from recurring_payments`)).length === 0);
+  ok('B no ve los objetivos de A', (await q(`select * from goals`)).length === 0);
+  await throws('B no puede colgar un pago de la cuenta de A', () => db.query(`insert into recurring_payments(id,name,amount_minor,frequency,next_due,anchor_day,account_id) values (gen_random_uuid(),'x',1,'monthly','2026-11-20',20,$1)`, [a1]), /foreign key/i);
+});
+await asUser(A, async () => {
+  await db.query(`delete from recurring_payments where id=$1`, [P1]);
+  ok('borrar un pago conserva sus movimientos (sin vínculo)', (await q(`select count(*)::int c from transactions where amount_minor=1299 and recurring_payment_id is null`))[0].c === 2);
+});
+
 // ── Grupos ──
 const G1 = '00000000-0000-4000-8000-0000000000a1';
 await asUser(A, async () => {

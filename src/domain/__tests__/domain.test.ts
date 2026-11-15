@@ -255,7 +255,7 @@ describe('¿puedo comprarlo? (simulación)', () => {
   it('precio inválido', () => { expect(() => simulatePurchase(1000, 0)).toThrow(); expect(() => simulatePurchase(1000, 1.5)).toThrow(); });
 });
 describe('asistente: respuestas calculadas', () => {
-  const facts = { available: 100000, totalMoney: 150000, currency: 'EUR', month: { income: 200000, spending: 34500, net: 165500, byCategory: { food: 30000, bus: 4500 } } };
+  const facts = { available: 100000, totalMoney: 150000, currency: 'EUR', reserved: { payments: 81299, debts: 0, savings: 40000 }, weekPayments: { count: 1, total: 1299 }, month: { income: 200000, spending: 34500, net: 165500, byCategory: { food: 30000, bus: 4500 } } };
   it('gasto del mes', () => expect(answerQuestion('¿Cuánto he gastado este mes?', facts)).toEqual({ kind: 'spent', amount: 34500 }));
   it('categoría principal', () => expect(answerQuestion('¿En qué gasto más dinero?', facts)).toEqual({ kind: 'topCategory', categoryId: 'food', amount: 30000 }));
   it('ingresos', () => expect(answerQuestion('ingresos de este mes', facts)).toEqual({ kind: 'income', amount: 200000 }));
@@ -263,5 +263,89 @@ describe('asistente: respuestas calculadas', () => {
   it('compra con precio', () => expect(answerQuestion('¿Puedo comprar algo de 200 €?', facts)).toMatchObject({ kind: 'purchase', sim: { after: 80000, verdict: 'fits' } }));
   it('precio con decimales', () => expect(answerQuestion('puedo comprar unos cascos de 179,99', facts)).toMatchObject({ kind: 'purchase', sim: { price: 17999 } }));
   it('sin gastos no inventa categoría', () => expect(answerQuestion('en que gasto mas', { ...facts, month: { ...facts.month, byCategory: {} } })).toEqual({ kind: 'noSpending' }));
+  it('reservado', () => expect(answerQuestion('¿Cuánto tengo reservado?', facts)).toEqual({ kind: 'reserved', payments: 81299, savings: 40000 }));
+  it('pagos de la semana', () => expect(answerQuestion('¿Qué pagos tengo esta semana?', facts)).toEqual({ kind: 'weekPayments', count: 1, total: 1299 }));
   it('pregunta desconocida no inventa nada', () => expect(answerQuestion('¿qué tiempo hace?', facts)).toEqual({ kind: 'unknown' }));
+});
+
+import { confirmPayment, monthlyEquivalent, nextOccurrence, reservedForPayments, upcoming, yearlyCost } from '../recurring';
+import { canWithdraw, goalProgress, protectedSavings } from '../goals';
+import type { Goal, RecurringPayment } from '../types';
+const pay = (o: Partial<RecurringPayment> = {}): RecurringPayment => ({
+  id: 'p1', name: 'Netflix', amountMinor: 1299, frequency: 'monthly', nextDue: '2026-11-20', anchorDay: 20, accountId: 'a', categoryId: null, active: true, createdAt: '', ...o,
+});
+describe('pagos recurrentes', () => {
+  it('semanal, mensual y anual', () => {
+    expect(nextOccurrence('2026-11-20', 'weekly', 20)).toBe('2026-11-27');
+    expect(nextOccurrence('2026-12-20', 'monthly', 20)).toBe('2027-01-20');
+    expect(nextOccurrence('2026-11-20', 'yearly', 20)).toBe('2027-11-20');
+  });
+  it('un pago del día 31 no se queda en el 28', () => {
+    expect(nextOccurrence('2027-01-31', 'monthly', 31)).toBe('2027-02-28');
+    expect(nextOccurrence('2027-02-28', 'monthly', 31)).toBe('2027-03-31');
+    expect(nextOccurrence('2028-02-29', 'yearly', 29)).toBe('2029-02-28');
+  });
+  it('reserva solo lo que vence en 30 días', () => {
+    const ps = [pay(), pay({ id: 'p2', name: 'Alquiler', amountMinor: 80000, nextDue: '2026-12-01', anchorDay: 1 }), pay({ id: 'p3', name: 'Seguro', amountMinor: 30000, frequency: 'yearly', nextDue: '2027-03-01' })];
+    expect(reservedForPayments(ps, '2026-11-15')).toBe(1299 + 80000);
+  });
+  it('un semanal aparece varias veces en la ventana', () => {
+    expect(upcoming([pay({ frequency: 'weekly', nextDue: '2026-11-16' })], '2026-11-15').map((o) => o.due)).toEqual(['2026-11-16', '2026-11-23', '2026-11-30', '2026-12-07', '2026-12-14']);
+  });
+  it('los atrasados cuentan y se marcan; los inactivos no', () => {
+    const o = upcoming([pay({ nextDue: '2026-11-10', anchorDay: 10 }), pay({ id: 'x', active: false })], '2026-11-15');
+    expect(o.map((x) => [x.due, x.overdue])).toEqual([['2026-11-10', true], ['2026-12-10', false]]);
+  });
+  it('equivalente mensual y coste anual', () => {
+    expect(monthlyEquivalent(pay({ frequency: 'yearly', amountMinor: 12000 }))).toBe(1000);
+    expect(monthlyEquivalent(pay({ frequency: 'weekly', amountMinor: 1000 }))).toBe(4333);
+    expect(yearlyCost(pay())).toBe(15588);
+  });
+  it('confirmar crea el gasto real y avanza el vencimiento', () => {
+    const r = confirmPayment(pay(), [], 't-1', 'now');
+    expect(r.tx).toMatchObject({ kind: 'expense', amountMinor: 1299, occurredOn: '2026-11-20', recurringPaymentId: 'p1', description: 'Netflix' });
+    expect(r.payment.nextDue).toBe('2026-12-20');
+  });
+  it('pagos duplicados: confirmar dos veces el mismo vencimiento no crea dos gastos', () => {
+    const first = confirmPayment(pay(), [], 't-1', 'now');
+    const again = confirmPayment(pay(), [first.tx!], 't-2', 'now'); // reintento con el pago sin avanzar
+    expect(again.tx).toBeNull();
+    expect(again.payment.nextDue).toBe('2026-12-20');
+  });
+});
+describe('objetivos de ahorro', () => {
+  const goal = (o: Partial<Goal> = {}): Goal => ({ id: 'g', name: 'Portátil', targetMinor: 120000, dueDate: null, contributions: [], createdAt: '', ...o });
+  const c = (amountMinor: number) => ({ id: String(amountMinor), amountMinor, on: '2026-11-01' });
+  it('progreso con aportaciones y retiradas', () => {
+    expect(goalProgress(goal({ contributions: [c(50000), c(-20000)] }), '2026-11-15')).toMatchObject({ saved: 30000, remaining: 90000, pct: 25, done: false, perMonth: null });
+  });
+  it('ahorro mensual necesario, redondeado hacia arriba', () => {
+    expect(goalProgress(goal({ dueDate: '2027-02-15', contributions: [c(20000)] }), '2026-11-15')).toMatchObject({ monthsLeft: 3, perMonth: 33334 });
+  });
+  it('fecha pasada o sin fecha: no inventa cuota', () => expect(goalProgress(goal({ dueDate: '2026-01-01' }), '2026-11-15').perMonth).toBeNull());
+  it('objetivo cumplido y superado', () => expect(goalProgress(goal({ contributions: [c(130000)] }), '2026-11-15')).toMatchObject({ pct: 100, done: true, remaining: 0 }));
+  it('lo reservado se descuenta UNA vez del disponible', () => {
+    const goals = [goal({ contributions: [c(30000)] }), goal({ id: 'g2', contributions: [c(10000)] })];
+    const bank = acct('bank', { initialBalanceMinor: 100000 });
+    const r = availableToSpend({ accounts: [bank], balances: { bank: 100000 }, protectedSavingsMinor: protectedSavings(goals), reservedPaymentsMinor: 5000 });
+    expect(r.available).toBe(100000 - 40000 - 5000);
+    expect(r.totalMoney).toBe(100000); // reservar no es gastar: el dinero sigue en la cuenta
+  });
+  it('no se puede retirar más de lo reservado', () => {
+    const g = goal({ contributions: [c(5000)] });
+    expect(canWithdraw(g, 5000)).toBe(true);
+    expect(canWithdraw(g, 5001)).toBe(false);
+    expect(canWithdraw(g, 0)).toBe(false);
+  });
+});
+
+import { daysBetween, formatDisplayDate, parseDisplayDate } from '../dates';
+describe('fechas escritas a mano', () => {
+  it('acepta formatos habituales', () => {
+    expect(parseDisplayDate('20/11/2026')).toBe('2026-11-20');
+    expect(parseDisplayDate('1-2-27')).toBe('2027-02-01');
+  });
+  it('rechaza fechas imposibles', () => { expect(parseDisplayDate('31/02/2027')).toBeNull(); expect(parseDisplayDate('hoy')).toBeNull(); expect(parseDisplayDate('12/13/2026')).toBeNull(); });
+  it('ida y vuelta', () => expect(formatDisplayDate('2026-11-05')).toBe('05/11/2026'));
+  it('días entre fechas (cambio de hora incluido)', () => { expect(daysBetween('2026-10-24', '2026-10-26')).toBe(2); expect(daysBetween('2026-11-15', '2026-11-10')).toBe(-5); });
 });

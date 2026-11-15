@@ -82,6 +82,10 @@ function Gate() {
           <Stack.Screen name="cuenta" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="grupo" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="comprar" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="pago" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="objetivo" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="pagos" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="objetivos" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="asistente" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="cuentas" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="ajustes" options={{ animation: 'slide_from_right' }} />

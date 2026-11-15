@@ -9,6 +9,10 @@ export interface AssistantFacts {
   totalMoney: Minor;
   month: MonthSummary;
   currency: string;
+  /** Reservas ya descontadas del disponible. */
+  reserved: { payments: Minor; debts: Minor; savings: Minor };
+  /** Pagos que vencen en los próximos 7 días. */
+  weekPayments: { count: number; total: Minor };
 }
 
 export type AssistantAnswer =
@@ -18,6 +22,8 @@ export type AssistantAnswer =
   | { kind: 'total'; amount: Minor }
   | { kind: 'topCategory'; categoryId: string | null; amount: Minor }
   | { kind: 'noSpending' }
+  | { kind: 'reserved'; payments: Minor; savings: Minor }
+  | { kind: 'weekPayments'; count: number; total: Minor }
   | { kind: 'purchase'; sim: PurchaseSimulation }
   | { kind: 'unknown' };
 
@@ -39,6 +45,8 @@ export function answerQuestion(question: string, facts: AssistantFacts): Assista
     if (!top) return { kind: 'noSpending' };
     return { kind: 'topCategory', categoryId: top[0] === UNCATEGORIZED ? null : top[0], amount: top[1] };
   }
+  if (/reservad|apartad|set aside|reserved/.test(q)) return { kind: 'reserved', payments: facts.reserved.payments, savings: facts.reserved.savings };
+  if (/(pagos?|suscripci|payments?|bills?).*(semana|proxim|week|upcoming)|(que|what).*(pagos|payments)/.test(q)) return { kind: 'weekPayments', ...facts.weekPayments };
   if (/ingres|income|earn|cobr/.test(q)) return { kind: 'income', amount: facts.month.income };
   if (/gastad|gasto|gastos|spent|spend/.test(q)) return { kind: 'spent', amount: facts.month.spending };
   if (/disponible|puedo gastar|available|can i spend/.test(q)) return { kind: 'available', amount: facts.available };

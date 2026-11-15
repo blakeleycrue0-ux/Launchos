@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Account, Category, Group, Profile, Snapshot, Transaction } from '@/domain/types';
+import type { Account, Category, Goal, Group, Profile, RecurringPayment, Snapshot, Transaction } from '@/domain/types';
 import type { Repository } from './repository';
 
 const fail = (error: { message: string } | null) => {
@@ -10,14 +10,16 @@ const fail = (error: { message: string } | null) => {
 export function createSupabaseRepo(client: SupabaseClient, userId: string): Repository {
   return {
     async load(): Promise<Snapshot> {
-      const [p, a, c, t, g] = await Promise.all([
+      const [p, a, c, t, g, rp, go] = await Promise.all([
         client.from('profiles').select('*').eq('id', userId).single(),
         client.from('accounts').select('*').order('created_at'),
         client.from('categories').select('*').order('created_at'),
         client.from('transactions').select('*').order('occurred_on', { ascending: false }).order('created_at', { ascending: false }),
         client.from('groups').select('*').order('created_at'),
+        client.from('recurring_payments').select('*').order('next_due'),
+        client.from('goals').select('*').order('created_at'),
       ]);
-      fail(p.error); fail(a.error); fail(c.error); fail(t.error); fail(g.error);
+      fail(p.error); fail(a.error); fail(c.error); fail(t.error); fail(g.error); fail(rp.error); fail(go.error);
       const pr = p.data!;
       const profile: Profile = {
         id: pr.id,
@@ -38,13 +40,20 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): Repo
       const transactions: Transaction[] = (t.data ?? []).map((r) => ({
         id: r.id, kind: r.kind, amountMinor: Number(r.amount_minor), occurredOn: r.occurred_on,
         accountId: r.account_id, toAccountId: r.to_account_id, categoryId: r.category_id,
-        description: r.description ?? '', notes: r.notes ?? '', isRecurring: r.is_recurring, createdAt: r.created_at,
+        description: r.description ?? '', notes: r.notes ?? '', isRecurring: r.is_recurring, recurringPaymentId: r.recurring_payment_id, createdAt: r.created_at,
       }));
       const groups: Group[] = (g.data ?? []).map((r) => ({
         id: r.id, name: r.name, kind: r.kind, photoPreset: r.photo_preset, photoUri: null, currency: r.currency,
         budgetMinor: Number(r.budget_minor), createdAt: r.created_at,
       }));
-      return { profile, accounts, categories, transactions, groups };
+      const payments: RecurringPayment[] = (rp.data ?? []).map((r) => ({
+        id: r.id, name: r.name, amountMinor: Number(r.amount_minor), frequency: r.frequency, nextDue: r.next_due, anchorDay: r.anchor_day,
+        accountId: r.account_id, categoryId: r.category_id, active: r.active, createdAt: r.created_at,
+      }));
+      const goals: Goal[] = (go.data ?? []).map((r) => ({
+        id: r.id, name: r.name, targetMinor: Number(r.target_minor), dueDate: r.due_date, contributions: r.contributions ?? [], createdAt: r.created_at,
+      }));
+      return { profile, accounts, categories, transactions, groups, payments, goals };
     },
 
     async updateProfile(patch) {
@@ -73,7 +82,7 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): Repo
           {
             id: t.id, kind: t.kind, amount_minor: t.amountMinor, occurred_on: t.occurredOn, account_id: t.accountId,
             to_account_id: t.toAccountId, category_id: t.categoryId, description: t.description, notes: t.notes,
-            is_recurring: t.isRecurring,
+            is_recurring: t.isRecurring, recurring_payment_id: t.recurringPaymentId ?? null,
           },
           { onConflict: 'id' },
         )).error,
@@ -105,6 +114,30 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): Repo
 
     async deleteGroup(id) {
       fail((await client.from('groups').delete().eq('id', id)).error);
+    },
+
+    async upsertPayment(p) {
+      fail(
+        (await client.from('recurring_payments').upsert(
+          { id: p.id, name: p.name, amount_minor: p.amountMinor, frequency: p.frequency, next_due: p.nextDue, anchor_day: p.anchorDay,
+            account_id: p.accountId, category_id: p.categoryId, active: p.active },
+          { onConflict: 'id' },
+        )).error,
+      );
+    },
+    async deletePayment(id) {
+      fail((await client.from('recurring_payments').delete().eq('id', id)).error);
+    },
+    async upsertGoal(g) {
+      fail(
+        (await client.from('goals').upsert(
+          { id: g.id, name: g.name, target_minor: g.targetMinor, due_date: g.dueDate, contributions: g.contributions },
+          { onConflict: 'id' },
+        )).error,
+      );
+    },
+    async deleteGoal(id) {
+      fail((await client.from('goals').delete().eq('id', id)).error);
     },
 
     async deleteEverything() {

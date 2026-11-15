@@ -24,5 +24,6 @@ con dos implementaciones: local (dispositivo) y Supabase (PostgreSQL + RLS).
 ## Faltaba / sigue faltando
 - Grupos: ahora existen (crear, editar, borrar, fotografía, presupuesto) con su tabla y permisos; **falta** invitar, repartir gastos y liquidar.
 - ¿Puedo comprarlo? y asistente: existen en versión básica y determinista; **falta** integrar pagos, objetivos y un modelo de IA.
-- Sin construir: objetivos, suscripciones, deudas, estadísticas (pestaña Análisis), notificaciones, Apple/Google Sign In.
+- Construido después: pagos recurrentes y objetivos de ahorro, conectados al disponible.
+- Sin construir: deudas, estadísticas (pestaña Análisis), notificaciones, Apple/Google Sign In.
 - No probado: dispositivos físicos (safe areas, háptica, teclado nativo) ni Supabase real.
