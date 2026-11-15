@@ -9,7 +9,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { Button } from '@/ui/Button';
 import { Field } from '@/ui/Field';
 import { Icon } from '@/ui/Icon';
-import { Mascot } from '@/ui/Mascot';
+import { MioMascot } from '@/ui/MioMascot';
 import { PressableScale } from '@/ui/PressableScale';
 import { Screen } from '@/ui/Screen';
 import { Text } from '@/ui/Text';
@@ -47,11 +47,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen contentStyle={{ gap: 18, paddingBottom: insets.bottom + 24 }}>
+      <Screen contentStyle={{ gap: 14, paddingBottom: insets.bottom + 24 }}>
         <PressableScale onPress={() => router.back()} style={{ width: 44, height: 44, justifyContent: 'center' }} accessibilityLabel={t('common.back')} accessibilityRole="button">
           <Icon name="chevron-left" size={26} color={c.ink} />
         </PressableScale>
-        <View style={{ alignItems: 'center' }}><Mascot size={84} expression={error ? 'sleepy' : 'idle'} /></View>
+        <View style={{ alignItems: 'center' }}><MioMascot size={76} /></View>
         <View style={{ gap: 6 }}>
           <Text variant="title">{t(`auth.${mode}Title` as TKey)}</Text>
           <Text tone="soft">{t(`auth.${mode}Sub` as TKey)}</Text>
@@ -68,7 +68,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         ) : null}
         {mode !== 'forgot' ? (
           <PressableScale onPress={() => router.replace(mode === 'login' ? '/signup' : '/login')} style={{ alignSelf: 'center', padding: 8 }}>
-            <Text tone="soft">{mode === 'login' ? t('auth.noAccount') : t('welcome.haveAccount')} <Text variant="bodyStrong">{mode === 'login' ? t('auth.signupCta') : t('welcome.login')}</Text></Text>
+            <Text tone="soft">{mode === 'login' ? t('auth.noAccount') : t('auth.haveAccount')} <Text variant="bodyStrong">{mode === 'login' ? t('auth.signupCta') : t('welcome.login')}</Text></Text>
           </PressableScale>
         ) : null}
         <Text variant="caption" tone="faint" align="center">{t('auth.legal')}</Text>

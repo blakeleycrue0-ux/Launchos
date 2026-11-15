@@ -21,14 +21,14 @@ export function Chip({ label, selected, onPress, icon, trailing, testID }: {
       style={[styles.chip, { backgroundColor: selected ? c.ink : c.surfaceAlt }]}
     >
       <View style={styles.row}>
-        {icon ? <Icon name={icon} size={16} color={fg} /> : null}
-        <Text variant="bodyStrong" style={{ color: fg, fontSize: 14, lineHeight: 20 }} numberOfLines={1}>{label}</Text>
+        {icon ? <Icon name={icon} size={15} color={fg} /> : null}
+        <Text variant="bodyStrong" style={{ color: fg, fontSize: 13, lineHeight: 18 }} numberOfLines={1}>{label}</Text>
         {trailing ? <Icon name={trailing} size={14} color={fg} /> : null}
       </View>
     </PressableScale>
   );
 }
 const styles = StyleSheet.create({
-  chip: { height: 38, paddingHorizontal: 14, borderRadius: radii.pill, justifyContent: 'center' },
+  chip: { height: 34, paddingHorizontal: 12, borderRadius: radii.pill, justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });

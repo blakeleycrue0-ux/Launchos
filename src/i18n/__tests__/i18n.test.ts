@@ -24,12 +24,12 @@ describe('traducciones', () => {
     for (const file of [...walk(join(__dirname, '../../../app')), ...walk(join(__dirname, '../../../src'))]) {
       const src = readFileSync(file, 'utf8');
       for (const m of src.matchAll(/\bt\('([a-zA-Z_.]+)'/g)) if (!keys.has(m[1])) missing.push(`${file}: ${m[1]}`);
-      for (const m of src.matchAll(/'((?:home|set|tx|acc|add|cats|tab|ready|setup|auth|welcome|intents|common|error|date)\.[a-zA-Z_.]+)'/g)) if (!keys.has(m[1])) missing.push(`${file}: ${m[1]}`);
+      for (const m of src.matchAll(/'((?:home|set|tx|acc|add|cats|tab|ready|setup|auth|welcome|intents|common|error|date|group|buy|ai|pay|goal|gexp|join)\.[a-zA-Z_.]+)'/g)) if (!keys.has(m[1])) missing.push(`${file}: ${m[1]}`);
     }
     expect(missing).toEqual([]);
   });
   it('claves dinámicas cubiertas', () => {
-    for (const k of ['expense', 'income', 'transfer', 'refund', 'adjustment', 'debt_payment']) expect(es).toHaveProperty([`kind.${k}`]);
+    for (const k of ['expense', 'income', 'transfer', 'refund', 'adjustment', 'debt_payment', 'lent', 'repaid']) expect(es).toHaveProperty([`kind.${k}`]);
     for (const k of ['expense', 'income', 'transfer', 'refund', 'adjustment', 'debt_payment']) expect(es).toHaveProperty([`add.save.${k}`]);
     for (const m of ['login', 'signup', 'forgot']) for (const s of ['Title', 'Sub', 'Cta']) expect(es).toHaveProperty([`auth.${m}${s}`]);
     for (const k of ['food', 'transport', 'housing', 'leisure', 'shopping', 'health', 'education', 'subscriptions', 'travel', 'other']) expect(es).toHaveProperty([`cat.${k}`]);

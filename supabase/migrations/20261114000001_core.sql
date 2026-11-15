@@ -107,7 +107,7 @@ begin
   insert into public.categories (user_id, key, icon)
   values (new.id,'food','utensils'),(new.id,'transport','bus'),(new.id,'housing','home'),
          (new.id,'leisure','ticket'),(new.id,'shopping','bag'),(new.id,'health','pulse'),
-         (new.id,'education','book'),(new.id,'subscriptions','repeat'),(new.id,'travel','plane'),
+         (new.id,'education','book'),(new.id,'subscriptions','subscriptions'),(new.id,'travel','plane'),
          (new.id,'other','dots');
   return new;
 end $$;

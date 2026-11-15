@@ -30,6 +30,6 @@ export function Segmented<T extends string>({ options, value, onChange }: {
   );
 }
 const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', padding: 4, borderRadius: radii.pill, gap: 4 },
-  seg: { flex: 1, height: 38, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center' },
+  wrap: { flexDirection: 'row', padding: 3, borderRadius: radii.md, gap: 2 },
+  seg: { flex: 1, height: 34, borderRadius: radii.md - 3, alignItems: 'center', justifyContent: 'center' },
 });

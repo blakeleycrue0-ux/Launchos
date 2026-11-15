@@ -10,7 +10,7 @@ export const DEFAULT_CATEGORIES: { key: string; icon: string }[] = [
   { key: 'shopping', icon: 'bag' },
   { key: 'health', icon: 'pulse' },
   { key: 'education', icon: 'book' },
-  { key: 'subscriptions', icon: 'repeat' },
+  { key: 'subscriptions', icon: 'subscriptions' },
   { key: 'travel', icon: 'plane' },
   { key: 'other', icon: 'dots' },
 ];

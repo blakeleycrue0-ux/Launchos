@@ -16,6 +16,8 @@ import { fonts, radii } from '@/theme/tokens';
 import { Card } from '@/ui/Card';
 import { Chip } from '@/ui/Chip';
 import { EmptyState } from '@/ui/EmptyState';
+import { noOutline } from '@/ui/Field';
+import { IconButton } from '@/ui/Header';
 import { Icon } from '@/ui/Icon';
 import { PressableScale } from '@/ui/PressableScale';
 import { Screen } from '@/ui/Screen';
@@ -69,17 +71,16 @@ export default function Transactions() {
   };
 
   return (
-    <Screen bottomExtra={TAB_BAR_HEIGHT + 24} contentStyle={{ gap: 16 }}>
+    <Screen bottomExtra={TAB_BAR_HEIGHT + 20} contentStyle={{ gap: 12 }}>
       <View style={styles.titleRow}>
         <Text variant="title">{t('tx.title')}</Text>
-        <PressableScale onPress={exportCsv} testID="export-csv" accessibilityRole="button" accessibilityLabel={t('tx.exportCsv')}
-          style={[styles.iconBtn, { backgroundColor: c.surfaceAlt }]}><Icon name="download" size={20} color={c.ink} /></PressableScale>
+        <IconButton icon="download" label={t('tx.exportCsv')} onPress={exportCsv} testID="export-csv" />
       </View>
 
       <View style={[styles.search, { backgroundColor: c.surfaceAlt }]}>
-        <Icon name="search" size={18} color={c.inkFaint} />
+        <Icon name="search" size={17} color={c.inkFaint} />
         <TextInput value={query} onChangeText={setQuery} placeholder={t('tx.search')} placeholderTextColor={c.inkFaint} testID="tx-search"
-          style={{ flex: 1, color: c.ink, fontFamily: fonts[500], fontSize: 16, height: 46 }} returnKeyType="search" accessibilityLabel={t('tx.search')} />
+          style={{ flex: 1, color: c.ink, fontFamily: fonts[500], fontSize: 16, height: 42, ...noOutline }} returnKeyType="search" accessibilityLabel={t('tx.search')} />
         {query ? <PressableScale onPress={() => setQuery('')} accessibilityLabel={t('common.clear')}><Icon name="close" size={18} color={c.inkSoft} /></PressableScale> : null}
       </View>
 
@@ -89,15 +90,13 @@ export default function Transactions() {
         <PressableScale disabled={!month} onPress={() => month && setMonth(addMonths(month, 1))} style={styles.iconBtn} accessibilityLabel={t('tx.nextMonth')}><Icon name="chevron-right" size={22} color={month ? c.ink : c.inkFaint} /></PressableScale>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ marginHorizontal: -20 }} contentInset={{ left: 20, right: 20 }}>
-        <View style={{ width: 12 }} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingHorizontal: 20 }} style={{ marginHorizontal: -20 }}>
         <Chip label={t('tx.allTime')} selected={!month} onPress={() => setMonth(month ? null : f.month)} testID="filter-all" />
         <Chip label={catName ? categoryLabel(catName, t) : t('tx.category')} selected={!!cat} trailing="chevron-down" onPress={() => setSheet('cat')} testID="filter-category" />
         <Chip label={accName ? accName.name : t('tx.account')} selected={!!acc} trailing="chevron-down" onPress={() => setSheet('acc')} testID="filter-account" />
-        <View style={{ width: 12 }} />
       </ScrollView>
 
-      <Card style={{ flexDirection: 'row', gap: 16 }}>
+      <Card style={{ flexDirection: 'row', gap: 14, padding: 14 }}>
         <View style={{ flex: 1, gap: 2 }}><Text variant="micro" tone="soft" upper>{t('home.incomeLabel')}</Text><Text variant="headline">{formatMoney(totals.income, cur, intl)}</Text></View>
         <View style={{ width: StyleSheet.hairlineWidth * 2, backgroundColor: c.line }} />
         <View style={{ flex: 1, gap: 2 }}><Text variant="micro" tone="soft" upper>{t('home.spendingLabel')}</Text><Text variant="headline">{formatMoney(totals.spending, cur, intl)}</Text></View>
@@ -110,8 +109,8 @@ export default function Transactions() {
         groups.map((g) => (
           <View key={g.date} style={{ gap: 2 }}>
             <Text variant="micro" tone="soft" upper style={{ marginBottom: 2 }}>{dayLabel(g.date, t, intl)}</Text>
-            <Card style={{ paddingVertical: 4, paddingHorizontal: 16 }}>
-              {g.items.map((tx) => <TxRow key={tx.id} tx={tx} accounts={f.accounts} categories={f.categories} currency={cur} onPress={() => router.push(`/movimiento/${tx.id}`)} />)}
+            <Card style={{ paddingVertical: 2, paddingHorizontal: 14 }}>
+              {g.items.map((tx, i) => <TxRow key={tx.id} tx={tx} accounts={f.accounts} categories={f.categories} currency={cur} last={i === g.items.length - 1} onPress={() => router.push(`/movimiento/${tx.id}`)} />)}
             </Card>
           </View>
         ))
@@ -125,8 +124,8 @@ export default function Transactions() {
   );
 }
 const styles = StyleSheet.create({
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48 },
-  iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  search: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, borderRadius: radii.pill },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, borderRadius: radii.md },
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 });

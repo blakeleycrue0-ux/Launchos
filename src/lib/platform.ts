@@ -34,3 +34,30 @@ export async function shareTextFile(filename: string, content: string, mime: str
   if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(file.uri, { mimeType: mime, dialogTitle: filename });
   else notify('No se puede compartir en este dispositivo');
 }
+
+/** Comparte un enlace con la hoja del sistema; si no existe (escritorio), lo copia al portapapeles. */
+export async function shareLink(url: string, title: string): Promise<'shared' | 'copied' | 'failed'> {
+  try {
+    if (Platform.OS !== 'web') {
+      const { Share } = await import('react-native');
+      await Share.share({ message: url, title });
+      return 'shared';
+    }
+    const nav = navigator as Navigator & { share?: (d: { url: string; title: string }) => Promise<void> };
+    if (nav.share) { await nav.share({ url, title }); return 'shared'; }
+    await navigator.clipboard.writeText(url);
+    return 'copied';
+  } catch {
+    try { await navigator.clipboard.writeText(url); return 'copied'; } catch { return 'failed'; }
+  }
+}
+
+/** Origen público de la app para construir enlaces de invitación. */
+export const appOrigin = () =>
+  Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin : process.env.EXPO_PUBLIC_APP_URL ?? 'https://mio-finanzas.netlify.app';
+
+/** Extrae el token de un enlace de invitación pegado (o devuelve el propio texto si ya es un token). */
+export function inviteTokenFrom(text: string): string | null {
+  const m = text.trim().match(/[?&]token=([a-f0-9]{64})/i) ?? text.trim().match(/^([a-f0-9]{64})$/i);
+  return m ? m[1].toLowerCase() : null;
+}

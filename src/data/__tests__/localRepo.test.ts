@@ -44,6 +44,20 @@ describe('localRepo', () => {
     await repo.deleteTransaction('t1');
     expect((await repo.load()).transactions).toEqual([]);
   });
+  it('grupos: crear, editar sin duplicar y borrar', async () => {
+    const repo = createLocalRepo();
+    const g = { id: 'g1', name: 'Ibiza 2027', kind: 'travel' as const, photoPreset: null, photoUri: null, currency: 'EUR', budgetMinor: 120000, createdAt: '2026-11-14' };
+    await repo.upsertGroup(g);
+    await repo.upsertGroup({ ...g, name: 'Ibiza' });
+    expect((await repo.load()).groups).toEqual([{ ...g, name: 'Ibiza' }]);
+    await repo.deleteGroup('g1');
+    expect((await repo.load()).groups).toEqual([]);
+  });
+  it('lee datos guardados antes de existir los grupos', async () => {
+    await AsyncStorage.setItem('mio.local.v1', JSON.stringify({ profile: { id: 'local' }, accounts: [], categories: [], transactions: [] }));
+    const old = await createLocalRepo().load();
+    expect([old.groups, old.payments, old.goals]).toEqual([[], [], []]);
+  });
   it('borrar todo devuelve un espacio nuevo', async () => {
     const repo = createLocalRepo();
     await repo.upsertAccount(acct);

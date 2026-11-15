@@ -17,9 +17,9 @@ import { Text } from '@/ui/Text';
 
 const OPTIONS = [
   { key: 'expenses', icon: 'wallet' },
-  { key: 'saving', icon: 'shield' },
-  { key: 'recurring', icon: 'repeat' },
-  { key: 'friends', icon: 'users' },
+  { key: 'saving', icon: 'savings' },
+  { key: 'recurring', icon: 'subscriptions' },
+  { key: 'friends', icon: 'groups' },
   { key: 'couple', icon: 'heart' },
 ] as const;
 
@@ -40,7 +40,7 @@ export default function Intents() {
           <Text variant="title">{t('intents.title')}</Text>
           <Text tone="soft">{t('intents.sub')}</Text>
         </View>
-        <View style={{ gap: 10 }}>
+        <View style={{ gap: 8 }}>
           {OPTIONS.map((o, i) => {
             const on = sel.includes(o.key);
             return (
@@ -48,10 +48,10 @@ export default function Intents() {
                 <PressableScale onPress={() => toggle(o.key)} feedback={false} accessibilityRole="checkbox" accessibilityState={{ checked: on }}
                   testID={`intent-${o.key}`}
                   style={[styles.opt, { backgroundColor: on ? c.ink : c.surface, borderColor: c.line }]}>
-                  <View style={[styles.ico, { backgroundColor: on ? c.inverse : c.surfaceAlt }]}><Icon name={o.icon} size={22} color={c.ink} /></View>
+                  <View style={[styles.ico, { backgroundColor: on ? c.inverse : c.surfaceAlt }]}><Icon name={o.icon} size={18} color={on ? c.ink : c.ink} /></View>
                   <Text variant="bodyStrong" style={{ flex: 1, color: on ? c.inverse : c.ink }}>{t(`intents.${o.key}` as TKey)}</Text>
                   <View style={[styles.check, { borderColor: on ? c.inverse : c.line, backgroundColor: on ? c.inverse : 'transparent' }]}>
-                    {on ? <Icon name="check" size={14} color={c.ink} stroke={2.6} /> : null}
+                    {on ? <Icon name="check" size={13} color={c.ink} stroke={2.5} /> : null}
                   </View>
                 </PressableScale>
               </Animated.View>
@@ -67,8 +67,8 @@ export default function Intents() {
   );
 }
 const styles = StyleSheet.create({
-  opt: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth * 2, minHeight: 72 },
-  ico: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  check: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  opt: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 12, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, minHeight: 58 },
+  ico: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  check: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   footer: { paddingHorizontal: 20, paddingTop: 8 },
 });

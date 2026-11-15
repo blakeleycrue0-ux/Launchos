@@ -8,8 +8,11 @@ const KEY = 'mio.local.v1';
 
 async function read(): Promise<Snapshot> {
   const raw = await AsyncStorage.getItem(KEY);
-  if (raw) return JSON.parse(raw) as Snapshot;
-  const fresh: Snapshot = { profile: EMPTY_PROFILE('local'), accounts: [], categories: seedCategories(), transactions: [] };
+  if (raw) {
+    const s = JSON.parse(raw) as Snapshot;
+    return { ...s, groups: s.groups ?? [], payments: s.payments ?? [], goals: s.goals ?? [] }; // datos de versiones anteriores
+  }
+  const fresh: Snapshot = { profile: EMPTY_PROFILE('local'), accounts: [], categories: seedCategories(), transactions: [], groups: [], payments: [], goals: [] };
   await AsyncStorage.setItem(KEY, JSON.stringify(fresh));
   return fresh;
 }
@@ -32,6 +35,12 @@ export function createLocalRepo(): Repository {
     upsertTransaction: (t) => mutate((s) => ({ ...s, transactions: upsertById(s.transactions, t) })),
     deleteTransaction: (id) => mutate((s) => ({ ...s, transactions: s.transactions.filter((t) => t.id !== id) })),
     upsertCategory: (c) => mutate((s) => ({ ...s, categories: upsertById(s.categories, c) })),
+    upsertGroup: (g) => mutate((s) => ({ ...s, groups: upsertById(s.groups, g) })),
+    deleteGroup: (id) => mutate((s) => ({ ...s, groups: s.groups.filter((g) => g.id !== id) })),
+    upsertPayment: (p) => mutate((s) => ({ ...s, payments: upsertById(s.payments, p) })),
+    deletePayment: (id) => mutate((s) => ({ ...s, payments: s.payments.filter((p) => p.id !== id) })),
+    upsertGoal: (g) => mutate((s) => ({ ...s, goals: upsertById(s.goals, g) })),
+    deleteGoal: (id) => mutate((s) => ({ ...s, goals: s.goals.filter((g) => g.id !== id) })),
     deleteEverything: async () => {
       await chain;
       await AsyncStorage.removeItem(KEY);
