@@ -40,7 +40,7 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): Repo
       const transactions: Transaction[] = (t.data ?? []).map((r) => ({
         id: r.id, kind: r.kind, amountMinor: Number(r.amount_minor), occurredOn: r.occurred_on,
         accountId: r.account_id, toAccountId: r.to_account_id, categoryId: r.category_id,
-        description: r.description ?? '', notes: r.notes ?? '', isRecurring: r.is_recurring, recurringPaymentId: r.recurring_payment_id, createdAt: r.created_at,
+        description: r.description ?? '', notes: r.notes ?? '', isRecurring: r.is_recurring, recurringPaymentId: r.recurring_payment_id, groupRef: r.group_ref, createdAt: r.created_at,
       }));
       const groups: Group[] = (g.data ?? []).map((r) => ({
         id: r.id, name: r.name, kind: r.kind, photoPreset: r.photo_preset, photoUri: null, currency: r.currency,
@@ -82,7 +82,7 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): Repo
           {
             id: t.id, kind: t.kind, amount_minor: t.amountMinor, occurred_on: t.occurredOn, account_id: t.accountId,
             to_account_id: t.toAccountId, category_id: t.categoryId, description: t.description, notes: t.notes,
-            is_recurring: t.isRecurring, recurring_payment_id: t.recurringPaymentId ?? null,
+            is_recurring: t.isRecurring, recurring_payment_id: t.recurringPaymentId ?? null, group_ref: t.groupRef ?? null,
           },
           { onConflict: 'id' },
         )).error,

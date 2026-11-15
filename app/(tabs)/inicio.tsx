@@ -117,9 +117,11 @@ export default function Home() {
             sub: f.upcomingPayments[0] ? `${f.upcomingPayments[0].name} · ${dueLabel(f.upcomingPayments[0].due, f.today, t, intl)}` : t('home.paymentsEmpty') },
           { key: 'goals', icon: 'target', href: '/objetivos', title: t('home.goals'), amount: reserved.savings,
             sub: f.goals.length ? t('home.goalsCount', { n: f.goals.length }) : t('home.goalsEmpty') },
-        ] as const).map((r, i) => (
+          ...(f.position.owedToMe > 0 || f.position.iOwe > 0 ? [{ key: 'groups', icon: 'groups', href: '/grupos', title: t('home.groupDebts'), amount: 0,
+            sub: [f.position.owedToMe > 0 ? t('group.owedToYou', { amount: money(f.position.owedToMe) }) : null, f.position.iOwe > 0 ? t('group.youOwe', { amount: money(f.position.iOwe) }) : null].filter(Boolean).join(' · ') }] : []),
+        ] as { key: string; icon: string; href: '/pagos' | '/objetivos' | '/grupos'; title: string; amount: number; sub: string }[]).map((r, i, all) => (
           <PressableScale key={r.key} onPress={() => router.push(r.href)} scaleTo={0.985} testID={`home-${r.key}`} accessibilityRole="button" accessibilityLabel={r.title}
-            style={[styles.planRow, i === 0 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.line }]}>
+            style={[styles.planRow, i < all.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.line }]}>
             <View style={[styles.planIcon, { backgroundColor: c.surfaceAlt }]}><Icon name={r.icon} size={17} color={c.ink} /></View>
             <View style={{ flex: 1 }}>
               <Text variant="bodyStrong">{r.title}</Text>

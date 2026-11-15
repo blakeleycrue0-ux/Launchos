@@ -32,12 +32,12 @@ export function occurrencesUntil(payments: RecurringPayment[], today: ISODate, u
   return out.sort((a, b) => a.due.localeCompare(b.due) || a.name.localeCompare(b.name));
 }
 
-export const upcoming = (payments: RecurringPayment[], today: ISODate, days = RESERVE_WINDOW_DAYS) =>
+export const upcoming = (payments: RecurringPayment[], today: ISODate, days: number = RESERVE_WINDOW_DAYS) =>
   occurrencesUntil(payments, today, addDays(today, days));
 
 /** Importe a reservar: todo lo que vence (o está atrasado) dentro de la ventana. */
-export const reservedForPayments = (payments: RecurringPayment[], today: ISODate): Minor =>
-  upcoming(payments, today).reduce((s, o) => s + o.amountMinor, 0);
+export const reservedForPayments = (payments: RecurringPayment[], today: ISODate, days: number = RESERVE_WINDOW_DAYS): Minor =>
+  upcoming(payments, today, days).reduce((s, o) => s + o.amountMinor, 0);
 
 /** Equivalente mensual redondeado al céntimo (semanal ×52/12, anual /12). */
 export function monthlyEquivalent(p: Pick<RecurringPayment, 'amountMinor' | 'frequency'>): Minor {

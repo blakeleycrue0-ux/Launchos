@@ -2,8 +2,8 @@ import type { Account, Minor, Transaction } from './types';
 
 /**
  * Efecto de un movimiento sobre una cuenta concreta.
- *  - income / refund: suman
- *  - expense / debt_payment: restan
+ *  - income / refund / repaid: suman
+ *  - expense / debt_payment / lent: restan
  *  - adjustment: suma su diferencia con signo
  *  - transfer: resta en origen, suma en destino (una sola fila → atómica por diseño)
  */
@@ -11,9 +11,11 @@ export function effectOnAccount(tx: Transaction, accountId: string): Minor {
   switch (tx.kind) {
     case 'income':
     case 'refund':
+    case 'repaid':
       return tx.accountId === accountId ? tx.amountMinor : 0;
     case 'expense':
     case 'debt_payment':
+    case 'lent':
       return tx.accountId === accountId ? -tx.amountMinor : 0;
     case 'adjustment':
       return tx.accountId === accountId ? tx.amountMinor : 0;

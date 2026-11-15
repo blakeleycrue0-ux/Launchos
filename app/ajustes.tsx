@@ -52,11 +52,11 @@ export default function Settings() {
   const qc = useQueryClient();
   const r = useRepo();
   const session = useAuth((s) => s.session);
-  const { theme, setTheme, setLocale, dashboard, setDashboard } = useSettings();
+  const { theme, setTheme, setLocale, dashboard, setDashboard, reserveDays, setReserveDays, tightPct, setTightPct } = useSettings();
   const update = useUpdateProfile();
   const saveAccount = useSaveAccount();
   const [name, setName] = useState(f?.profile.displayName ?? '');
-  const [sheet, setSheet] = useState<'cur' | 'lang' | null>(null);
+  const [sheet, setSheet] = useState<'cur' | 'lang' | 'days' | 'tight' | null>(null);
   useEffect(() => { if (f) setName(f.profile.displayName); }, [f?.profile.displayName]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!f || !r) return null;
 
@@ -115,6 +115,11 @@ export default function Settings() {
         ))}
       </Section>
 
+      <Section title={t('set.calc')}>
+        <Row icon="subscriptions" label={t('set.reserveDays')} value={t('set.days', { n: reserveDays })} onPress={() => setSheet('days')} testID="row-reserve" />
+        <Row icon="bag" label={t('set.tight')} value={`${tightPct} %`} onPress={() => setSheet('tight')} testID="row-tight" />
+      </Section>
+
       <Section title={t('set.data')}>
         <Row icon="wallet" label={t('acc.title')} onPress={() => router.push('/cuentas')} testID="row-accounts" />
         <Row icon="tag" label={t('set.categories')} onPress={() => router.push('/categorias')} testID="row-categories" />
@@ -132,6 +137,10 @@ export default function Settings() {
 
       <Sheet<string> visible={sheet === 'cur'} title={t('set.currency')} value={f.profile.currency} onClose={() => setSheet(null)} onSelect={changeCurrency}
         options={SUPPORTED_CURRENCIES.map((x) => ({ value: x, label: `${x} · ${currencySymbol(x, intl)}` }))} />
+      <Sheet<string> visible={sheet === 'days'} title={t('set.reserveDays')} value={String(reserveDays)} onClose={() => setSheet(null)} onSelect={(v) => setReserveDays(Number(v))}
+        options={[7, 15, 30, 45, 60].map((n) => ({ value: String(n), label: t('set.days', { n }) }))} />
+      <Sheet<string> visible={sheet === 'tight'} title={t('set.tight')} value={String(tightPct)} onClose={() => setSheet(null)} onSelect={(v) => setTightPct(Number(v))}
+        options={[10, 25, 40, 50].map((n) => ({ value: String(n), label: `${n} %` }))} />
       <Sheet<Locale> visible={sheet === 'lang'} title={t('set.language')} value={locale} onClose={() => setSheet(null)} onSelect={setLocale}
         options={[{ value: 'es', label: 'Español' }, { value: 'en', label: 'English' }]} />
     </Screen>

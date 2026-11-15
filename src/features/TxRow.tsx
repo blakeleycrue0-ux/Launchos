@@ -9,7 +9,7 @@ import { PressableScale } from '@/ui/PressableScale';
 import { Text } from '@/ui/Text';
 import { categoryLabel, dayLabel, txTitle } from './labels';
 
-const KIND_ICON: Record<string, string> = { income: 'income', transfer: 'transfer', adjustment: 'scale', refund: 'income', debt_payment: 'coins' };
+const KIND_ICON: Record<string, string> = { income: 'income', transfer: 'transfer', adjustment: 'scale', refund: 'income', debt_payment: 'coins', lent: 'groups', repaid: 'groups' };
 
 export function TxRow({ tx, accounts, categories, currency, onPress, showDate, hideAccount, last }: {
   tx: Transaction; accounts: Account[]; categories: Category[]; currency: string; onPress?: () => void; showDate?: boolean; hideAccount?: boolean; last?: boolean;
@@ -19,8 +19,8 @@ export function TxRow({ tx, accounts, categories, currency, onPress, showDate, h
   const cat = categories.find((x) => x.id === tx.categoryId);
   const from = accounts.find((a) => a.id === tx.accountId)?.name ?? '';
   const to = tx.toAccountId ? accounts.find((a) => a.id === tx.toAccountId)?.name : null;
-  const icon = tx.kind === 'expense' ? cat?.icon ?? 'expense' : KIND_ICON[tx.kind] ?? 'dots';
-  const positive = tx.kind === 'income' || tx.kind === 'refund' || (tx.kind === 'adjustment' && tx.amountMinor > 0);
+  const icon = tx.kind === 'expense' ? cat?.icon ?? (tx.groupRef ? 'groups' : 'expense') : KIND_ICON[tx.kind] ?? 'dots';
+  const positive = tx.kind === 'income' || tx.kind === 'refund' || tx.kind === 'repaid' || (tx.kind === 'adjustment' && tx.amountMinor > 0);
   const neutral = tx.kind === 'transfer';
   const signed = neutral ? tx.amountMinor : positive ? Math.abs(tx.amountMinor) : -Math.abs(tx.amountMinor);
   const parts = to ? [`${from} → ${to}`] : [cat ? categoryLabel(cat, t) : null, hideAccount && cat ? null : from];

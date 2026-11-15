@@ -80,7 +80,7 @@ export default function Transactions() {
       <View style={[styles.search, { backgroundColor: c.surfaceAlt }]}>
         <Icon name="search" size={17} color={c.inkFaint} />
         <TextInput value={query} onChangeText={setQuery} placeholder={t('tx.search')} placeholderTextColor={c.inkFaint} testID="tx-search"
-          style={{ flex: 1, color: c.ink, fontFamily: fonts[500], fontSize: 15, height: 42, ...noOutline }} returnKeyType="search" accessibilityLabel={t('tx.search')} />
+          style={{ flex: 1, color: c.ink, fontFamily: fonts[500], fontSize: 16, height: 42, ...noOutline }} returnKeyType="search" accessibilityLabel={t('tx.search')} />
         {query ? <PressableScale onPress={() => setQuery('')} accessibilityLabel={t('common.clear')}><Icon name="close" size={18} color={c.inkSoft} /></PressableScale> : null}
       </View>
 

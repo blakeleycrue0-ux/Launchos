@@ -3,7 +3,11 @@ export type Minor = number;
 /** Fecha de calendario local YYYY-MM-DD (sin zona horaria, para evitar desfases). */
 export type ISODate = string;
 
-export type TxKind = 'expense' | 'income' | 'transfer' | 'adjustment' | 'refund' | 'debt_payment';
+/**
+ * 'lent'   = dinero adelantado a un grupo: sale de la cuenta, pero no es un gasto propio.
+ * 'repaid' = dinero devuelto por un grupo: entra en la cuenta, pero no es un ingreso.
+ */
+export type TxKind = 'expense' | 'income' | 'transfer' | 'adjustment' | 'refund' | 'debt_payment' | 'lent' | 'repaid';
 export type AccountKind = 'bank' | 'cash' | 'savings' | 'other';
 
 export interface Account {
@@ -40,6 +44,8 @@ export interface Transaction {
   isRecurring: boolean;
   /** Pago recurrente que originó este movimiento (evita registrarlo dos veces). */
   recurringPaymentId?: string | null;
+  /** Vínculo con un gasto o liquidación de grupo (único por usuario: evita duplicados). */
+  groupRef?: string | null;
   createdAt: string;
 }
 

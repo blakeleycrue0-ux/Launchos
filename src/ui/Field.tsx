@@ -30,5 +30,5 @@ export const Field = forwardRef<React.ComponentRef<typeof TextInput>, Props>(fun
   );
 });
 const styles = StyleSheet.create({
-  input: { height: 48, borderRadius: radii.md, paddingHorizontal: 14, fontSize: 15, borderWidth: 1, borderColor: 'transparent' },
+  input: { height: 48, borderRadius: radii.md, paddingHorizontal: 14, fontSize: Platform.OS === 'web' ? 16 : 15, borderWidth: 1, borderColor: 'transparent' },
 });

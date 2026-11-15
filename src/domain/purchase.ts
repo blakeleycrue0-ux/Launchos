@@ -21,10 +21,10 @@ export const TIGHT_REMAINING_PCT = 25;
  *  - fits:  se puede pagar con margen.
  * `available` ya debe descontar pagos, deudas y ahorro reservados.
  */
-export function simulatePurchase(available: Minor, price: Minor): PurchaseSimulation {
+export function simulatePurchase(available: Minor, price: Minor, tightPct: number = TIGHT_REMAINING_PCT): PurchaseSimulation {
   if (!Number.isInteger(price) || price <= 0) throw new Error('simulatePurchase: precio inválido');
   const after = available - price;
   const remainingPct = available > 0 && after > 0 ? Math.floor((after * 100) / available) : 0;
-  const verdict: PurchaseVerdict = after < 0 ? 'no' : remainingPct < TIGHT_REMAINING_PCT ? 'tight' : 'fits';
+  const verdict: PurchaseVerdict = after < 0 ? 'no' : remainingPct < tightPct ? 'tight' : 'fits';
   return { price, before: available, after, remainingPct, verdict };
 }

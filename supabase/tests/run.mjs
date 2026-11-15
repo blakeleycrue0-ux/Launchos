@@ -115,18 +115,89 @@ await asUser(B, async () => {
   await throws('B no puede añadirse como miembro', () => db.query(`insert into group_members(group_id,user_id) values ($1,$2)`, [G1, B]), /permission denied|row-level/i);
   await throws('B no puede crear un grupo a nombre de A', () => db.query(`insert into groups(id,owner_id,name,currency) values (gen_random_uuid(),$1,'x','EUR')`, [A]), /row-level/i);
 });
-await db.query(`insert into group_members(group_id,user_id) values ($1,$2)`, [G1, B]); // alta por backend (futura RPC de invitación)
+// ── Invitaciones ──
+const C = (await q(`insert into auth.users(email) values ('c@x') returning id`))[0].id;
+await db.query(`update profiles set display_name='Ana' where id=$1`, [A]);
+await db.query(`update profiles set display_name='Leo' where id=$1`, [B]);
+let token;
+await asUser(B, async () => { await throws('B (no propietario) no puede crear invitaciones', () => db.query(`select create_group_invite($1, 7)`, [G1]), /only the group owner/); });
+await asUser(A, async () => {
+  token = (await q(`select create_group_invite($1, 7) t`, [G1]))[0].t;
+  ok('A crea una invitación (token de 64 caracteres)', token.length === 64);
+  ok('la base guarda solo el hash, no el token', (await q(`select count(*)::int c from group_invites where token_hash=$1`, [token]))[0].c === 0);
+  await throws('caducidad fuera de rango rechazada', () => db.query(`select create_group_invite($1, 365)`, [G1]), /invalid expiry/);
+});
+await asUser(B, async () => {
+  ok('B no ve la tabla de invitaciones', (await q(`select * from group_invites`)).length === 0);
+  const pv = await q(`select * from preview_group_invite($1)`, [token]);
+  ok('vista previa muestra solo nombre y tipo', pv.length === 1 && pv[0].name === 'Ibiza 2027' && pv[0].already_member === false);
+  ok('un token inventado no devuelve nada', (await q(`select * from preview_group_invite('nope')`)).length === 0);
+  await throws('aceptar con token inválido falla', () => db.query(`select accept_group_invite('nope','x')`), /invalid or expired/);
+  await db.query(`select accept_group_invite($1, 'Leo')`, [token]);
+  await db.query(`select accept_group_invite($1, 'Leo')`, [token]); // repetir no duplica
+});
+ok('B queda como miembro una sola vez', (await q(`select count(*)::int c from group_members where group_id=$1 and user_id=$2`, [G1, B]))[0].c === 1);
 await asUser(B, async () => {
   ok('B, ya miembro, ve el grupo', (await q(`select * from groups`)).length === 1);
   ok('B ve a los 2 miembros', (await q(`select * from group_members`)).length === 2);
   ok('B, miembro, no puede editar (solo el propietario)', (await db.query(`update groups set name='hack' where id=$1`, [G1])).affectedRows === 0);
   await throws('B no puede ascenderse a propietario', () => db.query(`update group_members set role='owner' where user_id=$1`, [B]), /permission denied/i);
-  ok('B puede abandonar el grupo', (await db.query(`delete from group_members where user_id=$1`, [B])).affectedRows === 1);
-  ok('…y deja de verlo', (await q(`select * from groups`)).length === 0);
+  await throws('B no puede borrar su fila de miembro directamente', () => db.query(`delete from group_members where user_id=$1`, [B]), /permission denied/i);
 });
 await asUser(A, async () => {
-  ok('el propietario no puede abandonar su grupo (0 filas)', (await db.query(`delete from group_members where user_id=$1`, [A])).affectedRows === 0);
+  await throws('el propietario no puede abandonar su grupo', () => db.query(`select leave_group($1)`, [G1]), /cannot leave/);
   await throws('owner_id inmutable', () => db.query(`update groups set owner_id=$1 where id=$2`, [B, G1]), /immutable|row-level/i);
+});
+
+// ── Gastos compartidos, repartos y liquidaciones ──
+const E1 = '00000000-0000-4000-8000-0000000000e1', S1 = '00000000-0000-4000-8000-0000000000f1';
+const shares = (o) => JSON.stringify(Object.entries(o).map(([user_id, share_minor]) => ({ user_id, share_minor })));
+await asUser(A, async () => { await db.query(`select accept_group_invite($1,'x')`, [token]).catch(() => {}); });
+await asUser(B, async () => { await db.query(`select accept_group_invite($1, 'Leo')`, [token]); });
+await asUser(C, async () => {
+  await throws('C (no miembro) no puede añadir gastos', () => db.query(`select save_group_expense($1,$2,$3,8000,'Cena','2026-11-15','equal',$4)`, [E1, G1, C, shares({ [C]: 8000 })]), /not a member/);
+  ok('C no ve gastos del grupo', (await q(`select * from group_expenses`)).length === 0);
+});
+await asUser(B, async () => {
+  await throws('el reparto debe sumar el importe', () => db.query(`select save_group_expense($1,$2,$3,8000,'Cena','2026-11-15','equal',$4)`, [E1, G1, A, shares({ [A]: 4000, [B]: 3999 })]), /add up/);
+  await throws('no se puede repartir a alguien de fuera', () => db.query(`select save_group_expense($1,$2,$3,8000,'Cena','2026-11-15','equal',$4)`, [E1, G1, A, shares({ [A]: 4000, [C]: 4000 })]), /invalid share/);
+  await throws('quien paga debe ser miembro', () => db.query(`select save_group_expense($1,$2,$3,8000,'Cena','2026-11-15','equal',$4)`, [E1, G1, C, shares({ [A]: 4000, [B]: 4000 })]), /payer is not a member/);
+  await throws('escritura directa en la tabla bloqueada', () => db.query(`insert into group_expenses(id,group_id,created_by,paid_by,amount_minor,occurred_on,split_kind) values (gen_random_uuid(),$1,$2,$2,1,'2026-11-15','equal')`, [G1, B]), /permission denied/i);
+  await db.query(`select save_group_expense($1,$2,$3,8000,'Cena','2026-11-15','equal',$4)`, [E1, G1, A, shares({ [A]: 4000, [B]: 4000 })]);
+  await db.query(`select save_group_expense($1,$2,$3,9000,'Cena y copas','2026-11-15','amounts',$4)`, [E1, G1, A, shares({ [A]: 3000, [B]: 6000 })]);
+  const e = await q(`select amount_minor::int a, (select count(*)::int from group_expense_shares where expense_id=$1) n, (select sum(share_minor)::int from group_expense_shares where expense_id=$1) s from group_expenses where id=$1`, [E1]);
+  ok('gasto creado y editado por su autor: reparto reemplazado sin duplicar', e.length === 1 && e[0].a === 9000 && e[0].n === 2 && e[0].s === 9000);
+  await throws('B no puede registrar una liquidación entre otros', () => db.query(`select save_group_settlement($1,$2,$3,$4,100,'2026-11-15')`, [S1, G1, A, C]), /involved|invalid/);
+  await db.query(`select save_group_settlement($1,$2,$3,$4,6000,'2026-11-15')`, [S1, G1, B, A]);
+  await db.query(`select save_group_settlement($1,$2,$3,$4,6000,'2026-11-15')`, [S1, G1, B, A]); // reintento
+  ok('liquidación registrada una sola vez', (await q(`select count(*)::int c from group_settlements`))[0].c === 1);
+});
+await asUser(A, async () => {
+  ok('A ve el gasto, el reparto y la liquidación de su grupo', (await q(`select (select count(*) from group_expenses)+(select count(*) from group_expense_shares)+(select count(*) from group_settlements) n`))[0].n == 4);
+  ok('A ve el nombre visible de B y no su email', (await q(`select display_name from group_members where user_id=$1`, [B]))[0].display_name === 'Leo');
+  await throws('A no puede borrar la liquidación que registró B', () => db.query(`select delete_group_settlement($1)`, [S1]), /not allowed/);
+  await db.query(`select save_group_expense($1,$2,$3,9500,'Cena (corregida)','2026-11-15','amounts',$4)`, [E1, G1, A, shares({ [A]: 3500, [B]: 6000 })]);
+  ok('el propietario puede corregir un gasto ajeno', (await q(`select amount_minor::int a from group_expenses where id=$1`, [E1]))[0].a === 9500);
+});
+// baja de un miembro: deja de ver, pero su historial permanece para los demás
+await asUser(B, async () => {
+  await db.query(`select leave_group($1)`, [G1]);
+  ok('B, tras salir, ya no ve el grupo ni sus gastos', (await q(`select (select count(*) from groups)+(select count(*) from group_expenses) n`))[0].n == 0);
+  await throws('B, tras salir, no puede añadir gastos', () => db.query(`select save_group_expense(gen_random_uuid(),$1,$2,100,'x','2026-11-15','equal',$3)`, [G1, B, shares({ [B]: 100 })]), /not a member/);
+});
+await asUser(A, async () => {
+  ok('el historial de B se conserva para A', (await q(`select count(*)::int c from group_expense_shares where user_id=$1`, [B]))[0].c === 1);
+  const inv = (await q(`select id from group_invites`))[0].id;
+  await db.query(`select revoke_group_invite($1)`, [inv]);
+});
+await asUser(C, async () => { await throws('una invitación revocada ya no sirve', () => db.query(`select accept_group_invite($1,'Cris')`, [token]), /invalid or expired/); });
+await db.query(`update group_invites set revoked_at=null, expires_at=now()-interval '1 minute'`);
+await asUser(C, async () => { await throws('una invitación caducada ya no sirve', () => db.query(`select accept_group_invite($1,'Cris')`, [token]), /invalid or expired/); });
+await db.exec('reset role');
+await throws('anon no puede ejecutar las funciones de grupo', async () => { await db.exec(`set role anon`); try { await db.query(`select preview_group_invite('x')`); } finally { await db.exec('reset role'); } }, /permission denied/i);
+await asUser(A, async () => {
+  await db.query(`insert into transactions(id,kind,amount_minor,occurred_on,account_id,group_ref) values (gen_random_uuid(),'lent',6000,'2026-11-15',$1,'gx:e1:lent')`, [a1]);
+  await throws('un mismo vínculo de grupo no crea dos movimientos personales', () => db.query(`insert into transactions(id,kind,amount_minor,occurred_on,account_id,group_ref) values (gen_random_uuid(),'lent',6000,'2026-11-15',$1,'gx:e1:lent')`, [a1]), /unique|duplicate/i);
 });
 
 await db.exec('reset role');

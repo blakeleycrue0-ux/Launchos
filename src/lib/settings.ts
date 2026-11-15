@@ -15,6 +15,15 @@ interface SettingsState {
   theme: ThemePref;
   locale: Locale;
   dashboard: DashboardSections;
+  /** Días de pagos próximos que se reservan del disponible. */
+  reserveDays: number;
+  /** % del disponible por debajo del cual el simulador avisa de margen reducido. */
+  tightPct: number;
+  /** Invitación a un grupo pendiente de aceptar (llegó por enlace antes de iniciar sesión). */
+  pendingInvite: string | null;
+  setReserveDays: (n: number) => void;
+  setTightPct: (n: number) => void;
+  setPendingInvite: (t: string | null) => void;
   setTheme: (t: ThemePref) => void;
   setLocale: (l: Locale) => void;
   setDashboard: (patch: Partial<DashboardSections>) => void;
@@ -27,6 +36,12 @@ export const useSettings = create<SettingsState>()(
       theme: 'system',
       locale: deviceLocale(),
       dashboard: { month: true, accounts: true, recent: true },
+      reserveDays: 30,
+      tightPct: 25,
+      pendingInvite: null,
+      setReserveDays: (reserveDays) => set({ reserveDays }),
+      setTightPct: (tightPct) => set({ tightPct }),
+      setPendingInvite: (pendingInvite) => set({ pendingInvite }),
       setTheme: (theme) => set({ theme }),
       setLocale: (locale) => set({ locale }),
       setDashboard: (patch) => set((s) => ({ dashboard: { ...s.dashboard, ...patch } })),

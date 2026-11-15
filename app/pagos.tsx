@@ -57,11 +57,11 @@ export default function Payments() {
 
           <View style={{ gap: 6 }}>
             <View style={styles.between}>
-              <Text variant="headline">{t('pay.next30')}</Text>
+              <Text variant="headline">{t('pay.nextDays', { n: f.reserveDays })}</Text>
               <Text variant="bodyStrong" style={{ color: c.accent }} testID="pay-reserved">{money(f.availability.reserved.payments)}</Text>
             </View>
             <Card style={{ paddingVertical: 2, paddingHorizontal: 14 }}>
-              {upcoming.length === 0 ? <Text tone="soft" style={{ paddingVertical: 14 }}>{t('pay.none30')}</Text> : upcoming.map((o, i) => (
+              {upcoming.length === 0 ? <Text tone="soft" style={{ paddingVertical: 14 }}>{t('pay.noneDays', { n: f.reserveDays })}</Text> : upcoming.map((o, i) => (
                 <View key={`${o.paymentId}-${o.due}`} style={[styles.row, i < upcoming.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.line }]}>
                   <View style={{ flex: 1 }}>
                     <Text variant="bodyStrong" numberOfLines={1}>{o.name}</Text>
@@ -78,7 +78,7 @@ export default function Payments() {
                 </View>
               ))}
             </Card>
-            <Text variant="caption" tone="faint">{t('pay.reserveNote')}</Text>
+            <Text variant="caption" tone="faint">{t('pay.reserveNote', { n: f.reserveDays })}</Text>
           </View>
 
           <View style={{ gap: 6 }}>

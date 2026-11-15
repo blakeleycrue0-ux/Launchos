@@ -12,7 +12,7 @@ import { Text } from '@/ui/Text';
 import { GROUP_KIND_ICON, groupPhotoSource } from './groupPhotos';
 
 /** Tarjeta de grupo: fotografía a color con un degradado oscuro solo bajo el texto. */
-export function GroupCard({ group, onPress, height = 148, testID }: { group: Pick<Group, 'name' | 'kind' | 'photoUri' | 'photoPreset' | 'currency' | 'budgetMinor'>; onPress?: () => void; height?: number; testID?: string }) {
+export function GroupCard({ group, onPress, height = 148, testID, caption }: { group: Pick<Group, 'name' | 'kind' | 'photoUri' | 'photoPreset' | 'currency' | 'budgetMinor'>; onPress?: () => void; height?: number; testID?: string; caption?: string }) {
   const { t, intl } = useT();
   const src = groupPhotoSource(group);
   const body = (
@@ -24,7 +24,7 @@ export function GroupCard({ group, onPress, height = 148, testID }: { group: Pic
       <View style={styles.text}>
         <Text variant="headline" numberOfLines={1} style={{ color: '#F7F6F3', fontSize: 19, lineHeight: 24 }}>{group.name || t('group.untitled')}</Text>
         <Text variant="caption" numberOfLines={1} style={{ color: 'rgba(247,246,243,0.78)' }}>
-          {group.budgetMinor > 0 ? t('group.budgetOf', { amount: formatMoney(group.budgetMinor, group.currency, intl, { compact: true }) }) : t('group.noBudget')}
+          {caption ? caption : group.budgetMinor > 0 ? t('group.budgetOf', { amount: formatMoney(group.budgetMinor, group.currency, intl, { compact: true }) }) : t('group.noBudget')}
         </Text>
       </View>
     </>

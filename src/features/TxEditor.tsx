@@ -17,6 +17,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { fonts, radii } from '@/theme/tokens';
 import { Button } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
+import { DateField } from '@/ui/DateField';
 import { Header, IconButton } from '@/ui/Header';
 import { Icon } from '@/ui/Icon';
 import { Numpad } from '@/ui/Numpad';
@@ -26,10 +27,12 @@ import { Sheet } from '@/ui/Sheet';
 import { Toggle } from '@/ui/Toggle';
 import { noOutline } from '@/ui/Field';
 import { Text } from '@/ui/Text';
-import { categoryLabel, dayLabel } from './labels';
+import { categoryLabel } from './labels';
 
 const KINDS: TxKind[] = ['expense', 'income', 'transfer', 'refund'];
 const ALL_KINDS: TxKind[] = [...KINDS, 'adjustment'];
+/** Tipos que no se eligen a mano: nacen de un ajuste o de un grupo. */
+const FIXED_KINDS: TxKind[] = ['adjustment', 'lent', 'repaid', 'debt_payment'];
 
 /** Alta y edición de movimientos: importe → categoría → guardar. */
 export function TxEditor({ id }: { id?: string }) {
@@ -92,7 +95,7 @@ export function TxEditor({ id }: { id?: string }) {
     const toId = isTransfer ? toAccountId ?? accounts.find((a) => a.id !== accountId)?.id ?? null : null;
     const tx: Transaction = {
       id: editing?.id ?? newId(), kind, amountMinor, occurredOn: date, accountId, toAccountId: toId,
-      categoryId: isTransfer || isAdjust ? null : categoryId, description: description.trim(), notes: notes.trim(),
+      categoryId: isTransfer || isAdjust ? null : categoryId, recurringPaymentId: editing?.recurringPaymentId ?? null, groupRef: editing?.groupRef ?? null, description: description.trim(), notes: notes.trim(),
       isRecurring: recurring && !isTransfer && !isAdjust, createdAt: editing?.createdAt ?? new Date().toISOString(),
     };
     const errs = validateTransaction(tx, f.accounts);
@@ -110,17 +113,19 @@ export function TxEditor({ id }: { id?: string }) {
     }
   };
 
-  const catRow = !isTransfer && !isAdjust;
+  const catRow = !isTransfer && !isAdjust && kind !== 'lent' && kind !== 'repaid';
   const display = displayInput(amount, decimalSep);
   const toId = toAccountId ?? accounts.find((a) => a.id !== accountId)?.id ?? null;
   const line = { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.line };
-  const inputStyle = [{ flex: 1, color: c.ink, fontFamily: fonts[500], fontSize: 15, paddingVertical: 0, height: 46 }, noOutline] as const;
+  const inputStyle = [{ flex: 1, color: c.ink, fontFamily: fonts[500], fontSize: 16, paddingVertical: 0, height: 46 }, noOutline] as const;
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 20, gap: 12 }}>
         <Header close backLabel={t('common.close')} title={editing ? t('add.edit') : t('add.title')}
           right={editing ? <IconButton icon="trash" label={t('common.delete')} onPress={doDelete} testID="tx-delete" /> : undefined} />
-        {isAdjust ? null : (
+        {FIXED_KINDS.includes(kind) ? (
+          <Text variant="caption" tone="soft" align="center">{t(`kind.${kind}` as TKey)}{editing?.groupRef ? ` · ${t('add.fromGroup')}` : ''}</Text>
+        ) : (
           <Segmented<TxKind> value={kind} options={KINDS.map((k) => ({ value: k, label: t(`kind.${k}` as TKey) }))}
             onChange={(k) => { setKind(k); setError(null); if (k === 'transfer') setCategoryId(null); }} />
         )}
@@ -163,7 +168,7 @@ export function TxEditor({ id }: { id?: string }) {
             <Icon name="calendar" size={17} color={c.inkSoft} />
             <Text tone="soft" style={{ flex: 1 }}>{t('add.date')}</Text>
             <PressableScale onPress={() => shiftDate(-1)} hitSlop={8} accessibilityLabel={t('add.prevDay')} style={styles.dateBtn}><Icon name="chevron-left" size={16} color={c.inkSoft} /></PressableScale>
-            <Text variant="bodyStrong" style={{ minWidth: 64, textAlign: 'center' }} testID="date-label">{dayLabel(date, t, intl)}</Text>
+            <DateField inline value={date} onChange={(v) => v && setDate(v)} testID="date-label" />
             <PressableScale onPress={() => shiftDate(1)} hitSlop={8} accessibilityLabel={t('add.nextDay')} style={styles.dateBtn}><Icon name="chevron-right" size={16} color={c.inkSoft} /></PressableScale>
           </View>
           {!isAdjust ? (

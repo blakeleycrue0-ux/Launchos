@@ -4,7 +4,6 @@ import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { dayLabel } from '@/features/labels';
 import { useDeleteGoal, useFinance, useSaveGoal } from '@/data/hooks';
-import { formatDisplayDate, parseDisplayDate } from '@/domain/dates';
 import { canWithdraw, goalProgress } from '@/domain/goals';
 import { currencySymbol, formatMoney, minorToInput, parseAmount } from '@/domain/money';
 import { useT } from '@/i18n';
@@ -14,6 +13,7 @@ import { confirm } from '@/lib/platform';
 import { useTheme } from '@/theme/ThemeProvider';
 import { Button } from '@/ui/Button';
 import { Card } from '@/ui/Card';
+import { DateField } from '@/ui/DateField';
 import { Field } from '@/ui/Field';
 import { Header, IconButton } from '@/ui/Header';
 import { ProgressBar } from '@/ui/ProgressBar';
@@ -32,7 +32,7 @@ export default function GoalModal() {
   const cur = f?.profile.currency ?? 'EUR';
   const [name, setName] = useState(existing?.name ?? '');
   const [target, setTarget] = useState(existing ? minorToInput(existing.targetMinor, cur, decimalSep) : '');
-  const [date, setDate] = useState(existing?.dueDate ? formatDisplayDate(existing.dueDate) : '');
+  const [date, setDate] = useState<string | null>(existing?.dueDate ?? null);
   const [move, setMove] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
@@ -42,10 +42,9 @@ export default function GoalModal() {
 
   const submit = () => {
     const tg = parseAmount(target, cur);
-    const due = date.trim() ? parseDisplayDate(date) : null;
+    const due = date;
     if (!name.trim()) return setError(t('goal.errName'));
     if (!tg || tg <= 0) return setError(t('err.amount_required'));
-    if (date.trim() && !due) return setError(t('pay.errDate'));
     haptic.success();
     save.mutate({ id: existing?.id ?? newId(), name: name.trim(), targetMinor: tg, dueDate: due, contributions: existing?.contributions ?? [], createdAt: existing?.createdAt ?? new Date().toISOString() });
     router.back();
@@ -102,7 +101,7 @@ export default function GoalModal() {
         <Field label={t('goal.name')} value={name} onChangeText={(v) => { setName(v); setError(null); }} placeholder={t('goal.namePlaceholder')} maxLength={40} testID="goal-name" autoFocus={!existing} />
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <View style={{ flex: 1 }}><Field label={`${t('goal.target')} (${currencySymbol(cur, intl)})`} value={target} onChangeText={(v) => { setTarget(v); setError(null); }} keyboardType="decimal-pad" placeholder="0" testID="goal-target" /></View>
-          <View style={{ flex: 1 }}><Field label={t('goal.date')} value={date} onChangeText={(v) => { setDate(v); setError(null); }} keyboardType="numbers-and-punctuation" placeholder="DD/MM/AAAA" maxLength={10} testID="goal-date" /></View>
+          <View style={{ flex: 1 }}><DateField label={t('goal.date')} value={date} onChange={setDate} optional testID="goal-date" /></View>
         </View>
         {error ? <Text variant="caption" accessibilityRole="alert">{error}</Text> : null}
         <Text variant="caption" tone="faint">{t('goal.note')}</Text>

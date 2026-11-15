@@ -1,0 +1,32 @@
+# MIO · web móvil (Expo → estático). Las apps nativas no dependen de este archivo.
+[build]
+  command = "npm run build:web"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NPM_FLAGS = "--legacy-peer-deps"
+  EXPO_NO_TELEMETRY = "1"
+  # Claves PÚBLICAS (URL y clave publicable). La seguridad la da la RLS de la base de datos.
+  # PENDIENTE: se activan (quitando el #) cuando las migraciones estén aplicadas en Supabase.
+  # Hasta entonces la web funciona en modo local: sin cuentas y con los datos en el navegador.
+  # EXPO_PUBLIC_SUPABASE_URL = "https://dgphjhupgemsetyxyihp.supabase.co"
+  # EXPO_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_P0qIPsgfdHkZr5BXVnIrvA_s6musDLm"
+  EXPO_PUBLIC_APP_URL = "https://mio-finanzas.netlify.app"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "DENY"
+
+[[headers]]
+  for = "/_expo/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

@@ -1,21 +1,26 @@
 import { Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold, useFonts } from '@expo-google-fonts/manrope';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as SplashScreen from 'expo-splash-screen';
-import { Stack } from 'expo-router';
+import { Stack, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSnapshot } from '@/data/hooks';
 import { useT } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { isSupabaseConfigured } from '@/lib/config';
+import { inviteTokenFrom } from '@/lib/platform';
+import { useSettings } from '@/lib/settings';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
+// Enlace de invitación abierto sin sesión: se guarda el token y se retoma al terminar de entrar.
+const initialInvite = Platform.OS === 'web' && typeof window !== 'undefined' && window.location.pathname.includes('unirse') ? inviteTokenFrom(window.location.search) : null;
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 2, refetchOnWindowFocus: false } } });
 
@@ -46,6 +51,14 @@ function Gate() {
   const needsAuth = isSupabaseConfigured && !session;
   const resolved = ready && (needsAuth || snap.data || snap.isError);
   const [hidden, setHidden] = useState(false);
+  const pathname = usePathname();
+  const pendingInvite = useSettings((s) => s.pendingInvite);
+  const setPendingInvite = useSettings((s) => s.setPendingInvite);
+  const done = !!snap.data?.profile.onboardingDone;
+  useEffect(() => { if (initialInvite) setPendingInvite(initialInvite); }, [setPendingInvite]);
+  useEffect(() => {
+    if (!needsAuth && done && pendingInvite && !pathname.includes('unirse')) router.push('/unirse');
+  }, [needsAuth, done, pendingInvite, pathname]);
 
   useEffect(() => {
     if (resolved && !hidden) { SplashScreen.hideAsync().catch(() => undefined); setHidden(true); }
@@ -63,7 +76,6 @@ function Gate() {
     );
   }
 
-  const done = !!snap.data?.profile.onboardingDone;
   return (
     <>
       <StatusBar style={c.scheme === 'dark' ? 'light' : 'dark'} />
@@ -82,6 +94,9 @@ function Gate() {
           <Stack.Screen name="cuenta" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="grupo" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="comprar" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="grupo-gasto" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="unirse" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="grupo-detalle" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="pago" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="objetivo" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="pagos" options={{ animation: 'slide_from_right' }} />

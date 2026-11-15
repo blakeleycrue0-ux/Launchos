@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useMemo } from 'react';
-import { useColorScheme } from 'react-native';
+import React, { createContext, useContext, useEffect, useMemo } from 'react';
+import { Platform, useColorScheme } from 'react-native';
 import { useSettings } from '@/lib/settings';
 import { dark, light, type Colors } from './tokens';
 
@@ -9,6 +9,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const system = useColorScheme();
   const pref = useSettings((s) => s.theme);
   const colors = useMemo<Colors>(() => ((pref === 'system' ? system ?? 'dark' : pref) === 'light' ? light : dark), [pref, system]);
+  // Web: el fondo de la página y la barra del navegador siguen al tema (sin franjas de otro color en iPhone).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    document.documentElement.style.backgroundColor = colors.bg;
+    document.body.style.backgroundColor = colors.bg;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', colors.bg);
+  }, [colors]);
   return <Ctx.Provider value={colors}>{children}</Ctx.Provider>;
 }
 export const useTheme = () => useContext(Ctx);

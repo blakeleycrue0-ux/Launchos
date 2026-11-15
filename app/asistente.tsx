@@ -88,7 +88,7 @@ export default function Assistant() {
         </ScrollView>
         <View style={[styles.inputRow, { backgroundColor: c.surface, borderColor: c.line }]}>
           <TextInput value={text} onChangeText={setText} onSubmitEditing={() => ask(text)} placeholder={t('ai.placeholder')} placeholderTextColor={c.inkFaint} returnKeyType="send"
-            selectionColor={c.accent} accessibilityLabel={t('ai.placeholder')} testID="ai-input" style={{ flex: 1, color: c.ink, fontFamily: fonts[500], fontSize: 15, height: 44, ...noOutline }} />
+            selectionColor={c.accent} accessibilityLabel={t('ai.placeholder')} testID="ai-input" style={{ flex: 1, color: c.ink, fontFamily: fonts[500], fontSize: 16, height: 44, ...noOutline }} />
           <PressableScale onPress={() => ask(text)} disabled={!text.trim()} accessibilityRole="button" accessibilityLabel={t('ai.send')} testID="ai-send"
             style={[styles.send, { backgroundColor: text.trim() ? c.accent : c.surfaceAlt }]}>
             <Icon name="send" size={17} color={text.trim() ? '#16130D' : c.inkFaint} stroke={2.25} />

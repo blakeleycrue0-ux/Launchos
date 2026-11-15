@@ -349,3 +349,120 @@ describe('fechas escritas a mano', () => {
   it('ida y vuelta', () => expect(formatDisplayDate('2026-11-05')).toBe('05/11/2026'));
   it('días entre fechas (cambio de hora incluido)', () => { expect(daysBetween('2026-10-24', '2026-10-26')).toBe(2); expect(daysBetween('2026-11-15', '2026-11-10')).toBe(-5); });
 });
+
+import { computeShares, expenseEffects, groupSpent, myPosition, netBalances, settlementEffects, simplifyDebts } from '../groupLedger';
+import type { GroupExpense, GroupSettlement } from '../groupLedger';
+const gx = (o: Partial<GroupExpense> & Pick<GroupExpense, 'paidBy' | 'amountMinor' | 'shares'>): GroupExpense => ({
+  id: 'e' + Math.random(), groupId: 'g', createdBy: o.paidBy, description: '', occurredOn: '2026-11-15', splitKind: 'equal', createdAt: '', ...o,
+});
+const gs = (fromUser: string, toUser: string, amountMinor: number, id = 's1'): GroupSettlement => ({ id, groupId: 'g', fromUser, toUser, amountMinor, occurredOn: '2026-11-16', createdBy: fromUser, createdAt: '' });
+const sharesOf = (r: ReturnType<typeof computeShares>) => ('shares' in r ? r.shares : r.error);
+describe('grupos: reparto de un gasto', () => {
+  it('cena de 80 € entre 4 → 20 € cada uno', () => expect(sharesOf(computeShares(8000, 'equal', ['a', 'b', 'c', 'd']))).toEqual({ a: 2000, b: 2000, c: 2000, d: 2000 }));
+  it('100 € entre 3: los céntimos sobrantes se reparten sin perderse', () => {
+    const s = sharesOf(computeShares(10000, 'equal', ['a', 'b', 'c'])) as Record<string, number>;
+    expect(s).toEqual({ a: 3334, b: 3333, c: 3333 });
+    expect(Object.values(s).reduce((x, y) => x + y)).toBe(10000);
+  });
+  it('excluir participantes: solo pagan quienes participan', () => expect(sharesOf(computeShares(9000, 'equal', ['a', 'c']))).toEqual({ a: 4500, c: 4500 }));
+  it('por porcentajes (60/40) y con decimales', () => {
+    expect(sharesOf(computeShares(12000, 'percent', ['a', 'b'], { a: 60, b: 40 }))).toEqual({ a: 7200, b: 4800 });
+    const s = sharesOf(computeShares(1000, 'percent', ['a', 'b', 'c'], { a: 33.33, b: 33.33, c: 33.34 })) as Record<string, number>;
+    expect(Object.values(s).reduce((x, y) => x + y)).toBe(1000);
+  });
+  it('los porcentajes deben sumar 100', () => expect(sharesOf(computeShares(1000, 'percent', ['a', 'b'], { a: 60, b: 30 }))).toBe('percent_total'));
+  it('importes personalizados desiguales', () => expect(sharesOf(computeShares(9000, 'amounts', ['a', 'b'], { a: 3000, b: 6000 }))).toEqual({ a: 3000, b: 6000 }));
+  it('los importes deben sumar el total', () => expect(sharesOf(computeShares(9000, 'amounts', ['a', 'b'], { a: 3000, b: 5999 }))).toBe('amount_total'));
+  it('sin participantes o con negativos es error', () => {
+    expect(sharesOf(computeShares(100, 'equal', []))).toBe('no_participants');
+    expect(sharesOf(computeShares(100, 'amounts', ['a', 'b'], { a: 150, b: -50 }))).toBe('negative');
+  });
+  it('propiedad: cualquier reparto igualitario suma el total', () => {
+    for (let amount = 1; amount < 500; amount += 13)
+      for (let n = 1; n <= 6; n++) {
+        const s = sharesOf(computeShares(amount, 'equal', Array.from({ length: n }, (_, i) => `u${i}`))) as Record<string, number>;
+        expect(Object.values(s).reduce((x, y) => x + y, 0)).toBe(amount);
+      }
+  });
+});
+describe('grupos: quién debe a quién', () => {
+  const dinner = gx({ paidBy: 'ana', amountMinor: 12000, shares: { ana: 3000, leo: 3000, mar: 3000, pau: 3000 } });
+  it('Ana paga 120 € por cuatro: le deben 90 €', () => expect(netBalances({ expenses: [dinner], settlements: [] })).toEqual({ ana: 9000, leo: -3000, mar: -3000, pau: -3000 }));
+  it('los saldos siempre suman cero', () => {
+    const l = { expenses: [dinner, gx({ paidBy: 'leo', amountMinor: 5001, shares: { ana: 1667, leo: 1667, mar: 1667 } })], settlements: [gs('mar', 'ana', 1000)] };
+    expect(Object.values(netBalances(l)).reduce((a, b) => a + b, 0)).toBe(0);
+  });
+  it('deuda parcialmente liquidada', () => expect(netBalances({ expenses: [dinner], settlements: [gs('leo', 'ana', 1000)] })).toMatchObject({ ana: 8000, leo: -2000 }));
+  it('deuda totalmente liquidada → en paz', () => {
+    const l = { expenses: [dinner], settlements: [gs('leo', 'ana', 3000, 's1'), gs('mar', 'ana', 3000, 's2'), gs('pau', 'ana', 3000, 's3')] };
+    expect(Object.values(netBalances(l)).every((v) => v === 0)).toBe(true);
+    expect(simplifyDebts(netBalances(l))).toEqual([]);
+  });
+  it('simplifica: A→B y B→C se convierte en un solo pago A→C', () => {
+    const l = { expenses: [gx({ paidBy: 'b', amountMinor: 1000, shares: { a: 1000 } }), gx({ paidBy: 'c', amountMinor: 1000, shares: { b: 1000 } })], settlements: [] };
+    expect(simplifyDebts(netBalances(l))).toEqual([{ from: 'a', to: 'c', amountMinor: 1000 }]);
+  });
+  it('como máximo n−1 pagos y todos quedan a cero', () => {
+    const net = { a: 5000, b: -1500, c: -2500, d: 3000, e: -4000 };
+    const t = simplifyDebts(net);
+    expect(t.length).toBeLessThanOrEqual(4);
+    const after: Record<string, number> = { ...net };
+    for (const x of t) { after[x.from] += x.amountMinor; after[x.to] -= x.amountMinor; }
+    expect(Object.values(after).every((v) => v === 0)).toBe(true);
+  });
+  it('un miembro que ya no está sigue apareciendo en las cuentas', () => {
+    expect(simplifyDebts(netBalances({ expenses: [dinner], settlements: [] }))).toContainEqual({ from: 'pau', to: 'ana', amountMinor: 3000 });
+  });
+  it('presupuesto: gastado = suma de gastos (las liquidaciones no cuentan)', () => expect(groupSpent({ expenses: [dinner, dinner] })).toBe(24000));
+  it('mi posición suma por grupos sin compensar entre ellos', () => {
+    const g1 = { expenses: [dinner], settlements: [] };
+    const g2 = { expenses: [gx({ paidBy: 'leo', amountMinor: 4000, shares: { ana: 2000, leo: 2000 } })], settlements: [] };
+    expect(myPosition([g1, g2], 'ana')).toEqual({ owedToMe: 9000, iOwe: 2000 });
+  });
+});
+describe('grupos: efecto en el dinero personal (sin duplicar)', () => {
+  const dinner = gx({ id: 'd1', paidBy: 'ana', amountMinor: 12000, shares: { ana: 3000, leo: 3000, mar: 3000, pau: 3000 } });
+  const bank = acct('bank', { initialBalanceMinor: 100000 });
+  const toTx = (fx: ReturnType<typeof expenseEffects>) => fx.map((f) => tx({ kind: f.kind, amountMinor: f.amountMinor, accountId: 'bank', groupRef: f.ref }));
+  it('pago 120 € por cuatro: la cuenta baja 120, mi gasto es 30 y me deben 90', () => {
+    const txs = toTx(expenseEffects(dinner, 'ana'));
+    expect(accountBalance(bank, txs)).toBe(100000 - 12000);
+    expect(monthSummary(txs, '2026-11').spending).toBe(3000);
+    expect(myPosition([{ expenses: [dinner], settlements: [] }], 'ana').owedToMe).toBe(9000);
+  });
+  it('quien no pagó no tiene movimiento personal: solo una deuda pendiente', () => {
+    expect(expenseEffects(dinner, 'leo')).toEqual([]);
+    expect(myPosition([{ expenses: [dinner], settlements: [] }], 'leo').iOwe).toBe(3000);
+  });
+  it('la deuda pendiente se reserva del disponible, pero no es un gasto todavía', () => {
+    const owe = myPosition([{ expenses: [dinner], settlements: [] }], 'leo').iOwe;
+    const r = availableToSpend({ accounts: [bank], balances: { bank: 100000 }, reservedDebtsMinor: owe });
+    expect(r.available).toBe(97000);
+    expect(r.totalMoney).toBe(100000);
+  });
+  it('lo que me deben no aumenta mi disponible', () => {
+    const txs = toTx(expenseEffects(dinner, 'ana'));
+    expect(availableToSpend({ accounts: [bank], balances: accountBalances([bank], txs), owedToUserMinor: 9000 }).available).toBe(88000);
+  });
+  it('al cobrar, entra el dinero pero no cuenta como ingreso', () => {
+    const txs = [...toTx(expenseEffects(dinner, 'ana')), ...toTx(settlementEffects(gs('leo', 'ana', 3000), 'ana'))];
+    expect(accountBalance(bank, txs)).toBe(100000 - 12000 + 3000);
+    expect(monthSummary(txs, '2026-11')).toMatchObject({ income: 0, spending: 3000 });
+  });
+  it('al pagar mi deuda, el gasto se registra UNA vez y la reserva desaparece', () => {
+    const settle = gs('leo', 'ana', 3000);
+    const txs = toTx(settlementEffects(settle, 'leo'));
+    const owe = myPosition([{ expenses: [dinner], settlements: [settle] }], 'leo').iOwe;
+    expect(owe).toBe(0);
+    const r = availableToSpend({ accounts: [bank], balances: accountBalances([bank], txs), reservedDebtsMinor: owe });
+    expect(r.available).toBe(97000); // igual que antes de pagar: no se resta dos veces
+    expect(monthSummary(txs, '2026-11').spending).toBe(3000);
+  });
+  it('referencias únicas: reprocesar el mismo gasto da los mismos vínculos', () => {
+    expect(expenseEffects(dinner, 'ana').map((f) => f.ref)).toEqual(['gx:d1:share', 'gx:d1:lent']);
+    expect(settlementEffects(gs('leo', 'ana', 3000, 'z'), 'mar')).toEqual([]);
+  });
+  it('si pago algo en lo que no participo, todo es dinero adelantado', () => {
+    expect(expenseEffects(gx({ id: 'x', paidBy: 'ana', amountMinor: 500, shares: { leo: 500 } }), 'ana')).toEqual([{ ref: 'gx:x:lent', kind: 'lent', amountMinor: 500, occurredOn: '2026-11-15' }]);
+  });
+});
